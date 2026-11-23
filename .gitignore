@@ -1,0 +1,26 @@
+# ===== æ¸¸æˆæ•°æ®ä¸å‘å¸ƒäº§ç‰©ï¼ˆä¸å…¥åº“ï¼‰=====
+output/
+build/
+obj/
+tmp/
+deps/
+hostcc/
+tc/
+msys64/
+.temp/
+
+# ===== ç¬¬ä¸‰æ–¹å¯å†ç”Ÿæºç ï¼ˆGCC æºç æ ‘ï¼Œæ„å»ºæœŸç”± build_switch.py å¤„ç†ï¼‰=====
+src/gcc-src/
+
+# ===== ç³»ç»Ÿæ‚é¡¹ =====
+*.tmp
+Thumbs.db
+desktop.ini
+
+# ===== ·ÏÆú½»¸¶Îï¸±±¾£¨²»Èë¿â£©=====
+workspace_deliverables/*.zip
+workspace_deliverables/*.nro
+
+# ===== ·ÏÆú½»¸¶Îï¸±±¾£¨²»Èë¿â£©=====
+workspace_deliverables/*.zip
+workspace_deliverables/*.nro

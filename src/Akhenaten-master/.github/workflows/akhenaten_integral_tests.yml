@@ -1,0 +1,101 @@
+name: Akhenaten integral tests
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  integral-tests:
+    name: Linux / integral tests
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y cmake build-essential libgl1-mesa-dev libssl-dev libasound2-dev libpulse-dev meson ninja-build nasm
+    - name: Configure and build
+      run: |
+        cmake --preset linux-gcc-release-make
+        cmake --build --preset linux-gcc-release-make -- -j$(nproc)
+    - name: Run integral tests
+      id: tests
+      timeout-minutes: 30
+      env:
+        SDL_VIDEODRIVER: dummy
+        SDL_AUDIODRIVER: dummy
+      run: |
+        set +e
+        ./build/akhenaten --integraltests --integraltest-jobs $(nproc) --user-dir integraltests --nocrashdlg --no-logo --no-resource --nosound --window --size 800x600 --config-keys-baseline tools/config_keys_baseline.txt
+        echo "rc=$?" >> "$GITHUB_OUTPUT"
+        exit 0
+    - name: Render summary
+      if: always()
+      run: |
+        if [ -f integraltests/summary.md ]; then
+          cat integraltests/summary.md >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "_no test results_" >> "$GITHUB_STEP_SUMMARY"
+        fi
+    - name: Emit failure annotations
+      if: always()
+      run: |
+        if [ -f integraltests/summary.txt ]; then
+          grep -E '^FAIL ' integraltests/summary.txt | sed -E 's/^FAIL ([^ ]+) [^:]*: (.*)/::error title=integraltest \1::\2/' || true
+          grep -E '^PROBLEM ' integraltests/summary.txt | sed -E 's/^PROBLEM (.*)/::error title=integraltests::\1/' || true
+        fi
+    - name: Parse test counts
+      id: parse
+      if: always()
+      run: |
+        message="no results"
+        color="lightgrey"
+        if [ -f integraltests/counts.txt ]; then
+          passed=$(sed -nE 's/^passed=([0-9]+)/\1/p' integraltests/counts.txt)
+          failed=$(sed -nE 's/^failed=([0-9]+)/\1/p' integraltests/counts.txt)
+          total=$((passed + failed))
+          if [ "$total" -eq 0 ]; then
+            message="no tests"
+          elif [ "$failed" -eq 0 ]; then
+            message="${passed}/${total} passing"
+            color="brightgreen"
+          else
+            message="${passed}/${total} passing"
+            color="red"
+          fi
+        fi
+        echo "message=$message" >> "$GITHUB_OUTPUT"
+        echo "color=$color"   >> "$GITHUB_OUTPUT"
+    - name: Update tests badge gist
+      if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      with:
+        auth: ${{ secrets.AKHENATEN_TESTS_GIST }}
+        gistID: 28104123b52e0fc76b56b8df8ca345e7
+        filename: akhenaten-tests.json
+        label: tests
+        message: ${{ steps.parse.outputs.message }}
+        color: ${{ steps.parse.outputs.color }}
+    - name: Show test summary
+      if: always()
+      run: |
+        cat integraltests/summary.txt || true
+    - name: Upload logs and results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: akhenaten-integraltests
+        path: |
+          integraltests/summary.*
+          integraltests/shard-*/akhenaten-log.txt
+          integraltests/shard-*/results/
+        retention-days: 14
+    - name: Fail if tests failed
+      if: steps.tests.outputs.rc != '0'
+      run: |
+        echo "integral tests exited with code ${{ steps.tests.outputs.rc }}"
+        exit 1

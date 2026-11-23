@@ -1,0 +1,126 @@
+════════════════════════════════════════════════════════════
+  法老王 (Pharaoh) Nintendo Switch 移植版  v1.0
+  基于 Akhenaten 开源引擎 · 内置简体中文
+  安装/启动方式：Sphaira
+════════════════════════════════════════════════════════════
+
+【这是什么】
+将 GOG 版《法老王 Pharaoh Gold》(含 Cleopatra 资料片) 移植到
+Nintendo Switch 自制软件平台的整合包：
+  · 引擎：Akhenaten（dalerank 的法老王开源重写引擎）
+  · 平台层：libnx + SDL2 软件渲染，自制交叉工具链编译
+  · 中文：内置简体中文语言包 + Noto Sans SC 字体（默认即中文）
+  · 兼容任意系统版本（SysNAND/EmuNAND 均可）
+
+
+【包内结构】
+解压后请把 switch 文件夹整个放到 SD 卡根目录，最终为：
+
+SD卡/
+└─ switch/
+   ├─ akhenaten.nro            ← ① Sphaira 主列表用的入口（必须在这层）
+   └─ pharaoh/
+      ├─ akhenaten.nro         ← 同一程序（转发器/直启用这个路径更稳）
+      ├─ akhenaten.cfg         ← 可选配置文件（配置工具生成后放这里）
+      ├─ assets/               ← 游戏数据，约 660MB，不可改名
+      │  ├─ Data/              ← 原版图形 + 字体 + 贴图包 + 战役地图
+      │  ├─ AUDIO/             ← 原版语音/音乐/音效
+      │  ├─ Maps/              ← 原版自由模式地图
+      │  ├─ campaign.txt
+      │  └─ …
+      └─ 安装说明.txt
+
+说明：程序内部用绝对路径 sdmc:/switch/pharaoh/ 定位资源与配置，
+      所以无论从哪个位置启动，assets 都必须留在 sdmc:/switch/pharaoh/assets。
+
+
+【方式一（推荐）：Sphaira 安装转发器，从主菜单启动】
+Sphaira 自带「Forwarder 编辑器」，会把 NRO 打包成 Home 菜单图标，
+以完整内存（Title Takeover）运行，最适合本作这种吃内存的程序。
+
+1. 打开 Sphaira → 进入 Homebrew 页面；
+2. 列表里选中 akhenaten（列表来自 sdmc:/switch 下的 nro）；
+3. 按 + / Y 打开菜单 → 选「安装为 Forwarder / Install as forwarder」；
+4. 表单会自动填入 NRO 内嵌的标题、作者、版本、图标
+   （本包已内嵌：Akhenaten 法老王 / dalerank/TeleAgent / RA-Switch-1.0），
+   无需修改，直接确认安装；Title ID 让它随机生成即可；
+5. 回到 Home 菜单，出现「Akhenaten 法老王」图标，点击启动。
+
+优点：以正版标题级别运行，内存充足，不会被 Applet 模式限制。
+
+
+【方式二：Sphaira 直接启动 NRO】
+1. Sphaira → Homebrew 页面 → 选中 akhenaten → A 启动；
+2. 或 Sphaira → 文件浏览器 → 进入 switch/akhenaten.nro → A → Launch。
+
+注意：此方式取决于 Sphaira 当前所处的运行模式。
+若 Sphaira 是从「相册」进入的（Applet 模式），可用内存很小，
+本作静态需求约 50MB，可能直接报 2162-0004 退回。
+遇到该报错请改用【方式一】，或按住 R 键点开任意已安装游戏
+进入 Sphaira（Title Takeover 模式）后再启动。
+
+
+【首次启动】
+首次进入会加载约 30–60 秒（读取 660MB 资源并初始化中文字体），黑屏属正常，
+不要在此期间按 Home 或强制关闭。之后启动会快很多。
+
+
+【操作方式】
+  · 触摸屏：直接点选；
+  · 左摇杆：移动镜头；右摇杆：缩放；
+  · A：确认/建造；B：取消/右键菜单；X：旋转建筑；
+  · L/R：翻页/切换面板；+ (Start)：暂停/主菜单。
+
+
+【配置工具（可选）】
+运行《法老王Switch配置工具.html》（双击浏览器打开，无需联网）：
+  1. 按需开关 190+ 项设置（界面增强、玩法修正、音量、速度、难度…）；
+  2. 点「生成配置」→「下载 akhenaten.cfg」；
+  3. 把该文件放到 SD 卡 /switch/pharaoh/ 下（与 nro 同级）。
+未生成时使用内置默认值，可正常游玩。
+
+
+【存档】
+存档写入 SD 卡 /switch/pharaoh/ 下（按王朝名分目录），
+整体备份时把该目录里的存档文件夹复制到电脑即可。
+
+
+【常见问题】
+Q: Sphaira 的 Homebrew 列表里看不到 akhenaten？
+   → 确认 switch/akhenaten.nro 这一份存在（列表只扫 sdmc:/switch 层）；
+     放好后在 Sphaira 里刷新列表（或重启 Sphaira）。
+
+Q: 启动报 2162-0004 / 启动后立刻退回？
+   → 这是 Applet 模式内存不足，改用【方式一】转发器启动。
+
+Q: 报 2162-0004 但同时 Sphaira 自己也崩了（日志里模块是 sphaira、
+   栈上有 "bsd:s"）？
+   → 那是 Sphaira 自身网络初始化崩溃，与本作无关；
+     本作不联网。可先断开 Wi-Fi 再启动 Sphaira，或直接装转发器从主菜单启动。
+
+Q: 文字显示为方块？
+   → 确认 assets/Data/notosanssc-vf.ttf 与 notosanstc-vf.ttf 存在。
+
+Q: 删除安装？
+   → 删除 SD 卡 /switch/pharaoh 与 /switch/akhenaten.nro 即可；
+     转发器请先在系统设置里删除该「游戏」。
+
+
+Q: 点击图标后闪退，没有任何报错？
+   → 程序每次启动都会在 SD 卡 /switch/pharaoh/boot.log 写一行启动记录。
+     闪退后把这个文件发出来即可定位（它会记录 SD 挂载、资源校验、
+     SDL 初始化、第一帧这些关键节点）。
+
+【技术说明】
+  · 构建链：xpack aarch64-none-elf-gcc 15.2.1 + devkitPro newlib 4.6
+    (Switch 补丁版) + libnx + 自制 SDL2 软件渲染后端；
+  · libstdc++ 重建为 posix 线程模型（std::thread/std::mutex 真实可用）；
+  · NRO 内嵌 NACP（标题/作者/版本/图标）与语言/脚本资源，
+    Sphaira 转发器可直接读取，无需额外配置；
+  · 原版游戏资源从 SS 卡 assets 读取，本包不含任何游戏本体文件；
+    assets 数据来自用户自有正版 GOG 安装。
+
+法老王 Switch 移植 v1.0 · 2026-11
+
+
+AI生成

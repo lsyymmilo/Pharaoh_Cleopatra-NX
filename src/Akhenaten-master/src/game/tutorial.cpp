@@ -1,0 +1,45 @@
+#include "building/building_granary.h"
+#include "io/io_buffer.h"
+
+io_buffer* iob_tutorial_flags = new io_buffer([](io_buffer* iob, size_t version) {
+    uint16_t tmp = 0;
+    iob->bind(BIND_SIGNATURE_UINT16, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+});

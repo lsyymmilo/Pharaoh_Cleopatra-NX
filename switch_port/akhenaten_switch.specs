@@ -1,0 +1,12 @@
+#
+# Switch link specs for the Akhenaten port (adapted from devkitPro switch.specs,
+# without devkitPro-binutils-only options).
+#
+*link:
++ -T %:getenv(DKP_LIBNX /switch.ld) -pie --no-dynamic-linker --spare-dynamic-tags=0 --gc-sections -z text -z now --build-id=sha1
+
+*startfile:
+crti%O%s crtbegin%O%s --require-defined=main
+
+*endfile:
+crtend%O%s crtn%O%s

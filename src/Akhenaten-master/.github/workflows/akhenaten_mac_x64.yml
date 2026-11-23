@@ -1,0 +1,66 @@
+name: Akhenaten Build Mac x86_64
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    name: run on mac x86_64
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    # OpenH264 is skipped on this job: macos-latest is arm64 and meson builds
+    # libopenh264.a for arm64, which fails to link into the x86_64 binary.
+    - name: update-workspace
+      run: |
+        export CXXFLAGS=-stdlib=libc++
+        cmake --preset macos-clang-relwithdebinfo-make-x86_64 \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
+          -DOPTION_SYSTEM_LIBPNG=OFF \
+          -DOPTION_BUILD_LIBPNG=ON \
+          -DOPTION_ENABLE_VIDEO_RECORDING=OFF \
+          -DCMAKE_INSTALL_PREFIX="$PWD/build/install"
+
+    - name: build
+      run: |
+        cmake --build --preset macos-clang-relwithdebinfo-make-x86_64 -- -j$(sysctl -n hw.ncpu)
+
+    - name: install-and-bundle
+      run: |
+        cmake --build --preset macos-clang-relwithdebinfo-make-x86_64 --target install/local
+        mkdir macos_build
+        cp -R ./build/install/akhenaten.app ./macos_build/akhenaten.app
+        INNO_SRC=""
+        if [ -f ./build/tools/innoextract/bin/innoextract ]; then
+          INNO_SRC=./build/tools/innoextract/bin/innoextract
+        elif [ -f ./build/innoextract ]; then
+          INNO_SRC=./build/innoextract
+        else
+          curl -fsSL -o /tmp/inno-mac.tar.gz \
+            "https://github.com/dalerank/innoextract-nb/releases/download/v1.0.0/innoextract-macos-x64.tar.gz" \
+            && tar -xzf /tmp/inno-mac.tar.gz -C /tmp \
+            && INNO_SRC=/tmp/innoextract
+        fi
+        if [ -n "$INNO_SRC" ] && [ -f "$INNO_SRC" ]; then
+          mkdir -p ./macos_build/akhenaten.app/Contents/Resources \
+                   ./macos_build/akhenaten.app/Contents/MacOS
+          cp "$INNO_SRC" ./macos_build/akhenaten.app/Contents/Resources/innoextract
+          cp "$INNO_SRC" ./macos_build/akhenaten.app/Contents/MacOS/innoextract
+          cp "$INNO_SRC" ./macos_build/innoextract
+          chmod +x ./macos_build/akhenaten.app/Contents/Resources/innoextract \
+                   ./macos_build/akhenaten.app/Contents/MacOS/innoextract \
+                   ./macos_build/innoextract
+        else
+          echo "::warning::innoextract not bundled (mac x64 release asset missing?)"
+        fi
+
+    - uses: actions/upload-artifact@v6
+      with:
+        name: macos_x64_build
+        path: macos_build

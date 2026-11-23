@@ -1,0 +1,98 @@
+name: Akhenaten Build Emscripten
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build-akhenaten-emscripten-module:
+    name: run on linux
+    runs-on: ubuntu-22.04
+    container: emscripten/emsdk:4.0.1
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: build-project
+      run: |
+        git config --global --add safe.directory "*"
+        mkdir -p akhenaten-emscripten-module
+        mkdir -p build
+        mkdir -p build/data
+        cd build
+        emcmake cmake ../ -DCMAKE_BUILD_PLATFORM=win_emscripten -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXE_LINKER_FLAGS="-sMODULARIZE -sEXPORTED_RUNTIME_METHODS=callMain -sEXPORT_ALL -sEXPORT_NAME=akhenatem" -DCMAKE_CXX_FLAGS="" && emmake make
+        cd ..
+        cp build/akhenaten.js akhenaten-emscripten-module/
+        cp build/akhenaten.wasm akhenaten-emscripten-module/
+        cp ./data/pharaoh_fonts_pack.sgx ./build/data/pharaoh_fonts_pack.sgx
+        cp ./data/pharaoh_custom_pack.sgx ./build/data/pharaoh_custom_pack.sgx
+        cp ./data/pharaoh_houses_pack.sgx ./build/data/pharaoh_houses_pack.sgx
+        cp ./data/neucha.ttf ./build/data/neucha.ttf
+    - uses: actions/upload-artifact@v6
+      with:
+        name: emscripten_build
+        path: akhenaten-emscripten-module
+
+  build-Akhenaten-ems-launcher:
+    runs-on: ubuntu-latest
+    needs: build-akhenaten-emscripten-module
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+    - name: Checkout launcher 🛎️
+      uses: actions/checkout@v6
+      with:
+        repository: dalerank/akhenaten-ems
+        ref: refs/heads/main
+        token: ${{ secrets.GITHUB_TOKEN }}
+        persist-credentials: false
+    - uses: actions/download-artifact@v4
+      with:
+        name: emscripten_build
+        path: src/assets/module/
+    - name: Install and Build 🔧
+      env:
+        VITE_BASE: /Akhenaten/play/
+      run: |
+        npm install
+        npm run build
+    - name: Upload web game build 📦
+      uses: actions/upload-artifact@v4
+      with:
+        name: web-game
+        path: dist
+
+  deploy-pages:
+    runs-on: ubuntu-latest
+    needs: build-Akhenaten-ems-launcher
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
+    steps:
+    - name: Checkout site 🛎️
+      uses: actions/checkout@v6
+    - name: Download web game build 📥
+      uses: actions/download-artifact@v4
+      with:
+        name: web-game
+        path: docs/play
+    - name: Configure Pages
+      uses: actions/configure-pages@v5
+      with:
+        enablement: true
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: docs
+    - name: Deploy to GitHub Pages 🚀
+      id: deployment
+      uses: actions/deploy-pages@v4

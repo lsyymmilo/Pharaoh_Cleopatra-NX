@@ -1,0 +1,69 @@
+name: Akhenaten Build Windows
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  windows:
+    name: run on windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: ilammy/msvc-dev-cmd@v1.12.1
+    - name: install-meson-ninja
+      shell: pwsh
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install meson ninja
+    - name: update-workspace
+      shell: pwsh
+      run: |
+        mkdir bin_x64
+        mkdir bin_x64/data
+    - name: build-project
+      run: |
+        cmake --preset win-relwithdebinfo
+        cmake --build --preset win-relwithdebinfo --target akhenaten -j $env:NUMBER_OF_PROCESSORS
+        copy ./build/RelWithDebInfo/akhenaten.exe ./bin_x64/akhenaten.exe
+        copy ./build/RelWithDebInfo/akhenaten.pdb ./bin_x64/akhenaten.pdb
+        if (Test-Path ./build/RelWithDebInfo/innoextract.exe) {
+          copy ./build/RelWithDebInfo/innoextract.exe ./bin_x64/innoextract.exe
+        } elseif (Test-Path ./build/tools/innoextract/bin/innoextract.exe) {
+          copy ./build/tools/innoextract/bin/innoextract.exe ./bin_x64/innoextract.exe
+        } else {
+          $url = "https://github.com/dalerank/innoextract-nb/releases/download/v1.0.0/innoextract-windows-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\innoextract-windows-x64.zip"
+          Expand-Archive -Path "$env:TEMP\innoextract-windows-x64.zip" -DestinationPath "$env:TEMP\innoextract-win" -Force
+          copy "$env:TEMP\innoextract-win\innoextract.exe" ./bin_x64/innoextract.exe
+        }
+        copy ./data/pharaoh_fonts_pack.sgx ./bin_x64/data/pharaoh_fonts_pack.sgx
+        copy ./data/pharaoh_custom_pack.sgx ./bin_x64/data/pharaoh_custom_pack.sgx
+        copy ./data/pharaoh_houses_pack.sgx ./bin_x64/data/pharaoh_houses_pack.sgx
+        copy ./data/neucha.ttf ./bin_x64/data/neucha.ttf
+    - name: create-package
+      shell: pwsh
+      run: |
+        Compress-Archive -Path bin_x64/* -Destination windows_build.zip
+    - uses: actions/upload-artifact@v6
+      with:
+        name: windows_build
+        path: bin_x64
+    # itch.io updates the game itself: its package (akhenaten_content.yml) gets a build without the updater.
+    - name: build-itch-package
+      if: github.event_name == 'push'
+      run: |
+        cmake --preset win-relwithdebinfo -DAKHENATEN_UPDATER=OFF
+        cmake --build --preset win-relwithdebinfo --target akhenaten -j $env:NUMBER_OF_PROCESSORS
+        Copy-Item -Recurse ./bin_x64 ./bin_x64_itch
+        copy ./build/RelWithDebInfo/akhenaten.exe ./bin_x64_itch/akhenaten.exe
+        copy ./build/RelWithDebInfo/akhenaten.pdb ./bin_x64_itch/akhenaten.pdb
+    - uses: actions/upload-artifact@v6
+      if: github.event_name == 'push'
+      with:
+        name: windows_itch_build
+        path: bin_x64_itch

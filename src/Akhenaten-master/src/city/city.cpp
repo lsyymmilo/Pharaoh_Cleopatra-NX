@@ -1,0 +1,2028 @@
+#include "city.h"
+
+#include "city/constants.h"
+#include "city/buildings.h"
+#include "city/city_population.h"
+#include "city/city_desirability.h"
+#include "city/city_malaria_risk.h"
+#include "grid/malaria_risk.h"
+#include "grid/irrigation_value.h"
+#include "grid/crime.h"
+#include "core/object_property.h"
+#include "grid/water.h"
+#include "grid/natives.h"
+#include "grid/vegetation.h"
+#include "grid/trees.h"
+#include "grid/canals.h"
+#include "core/profiler.h"
+#include "core/calc.h"
+#include "game/difficulty.h"
+#include "game/game.h"
+#include "game/game_config.h"
+#include "scenario/scenario.h"
+#include "empire/empire_city.h"
+#include "empire/empire.h"
+#include "io/chunk_serializer.h"
+#include "io/io_buffer.h"
+#include "empire/trade_route.h"
+#include "building/building_granary.h"
+#include "building/building_house.h"
+#include "city/city_industry.h"
+#include "building/building_barracks.h"
+#include "building/building_burning_ruin.h"
+#include "figure/figure.h"
+#include "figuretype/figure_native.h"
+#include "figuretype/figure_fishing_point.h"
+#include "graphics/image.h"
+#include "graphics/image_groups.h"
+#include "grid/image.h"
+#include "grid/random.h"
+#include "grid/terrain.h"
+#include "figuretype/figure_kingdome_trader.h"
+#include "figuretype/figure_trader_ship.h"
+#include "figuretype/figure_tomb_robber.h"
+#include "figuretype/figure_flotsam.h"
+#include "figuretype/figure_funeral_walker.h"
+#include "city_warnings.h"
+#include "game/game_events.h"
+#include "empire/empire_object.h"
+#include "overlays/city_overlay.h"
+#include "grid/building.h"
+#include "building/construction/build_planner.h"
+#include "dev/debug.h"
+#include "graphics/view/lookup.h"
+#include "graphics/view/view.h"
+#include "graphics/elements/lang_text.h"
+#include "empire/empire_traders.h"
+#include "scenario/criteria.h"
+#include "city/city_religion_osiris.h"
+#include "scenario/distant_battle.h"
+
+#include <core/string.h>
+#include <string.h>
+#include <time.h>
+#include "scenario/map.h"
+
+city_t g_city;
+events::typed_queue g_city_events;
+
+ANK_DECLARE_CONFIG_ITERATOR(config_reload_city);
+void config_reload_city() {
+    g_city.reload_system(g_city.animals);
+}
+
+void city_t::init() {
+    buildings.shutdown();
+    g_city_events.removeListeners();
+
+    memset(this, 0, sizeof(struct city_t));
+
+    unused.faction_bytes[0] = 0;
+    unused.faction_bytes[1] = 0;
+
+    sentiment.value = 60;
+    health.target_value = 50;
+    health.value = 50;
+    unused.unknown_00c0 = 3;
+    finance.tax_percentage = 7;
+    taxes.house_tax_bonus_percentage = 110;
+    trade.caravan_import_resource = RESOURCES_MIN;
+    trade.caravan_backup_import_resource = RESOURCES_MIN;
+    population.monthly.next_index = 0;
+    population.monthly.count = 0;
+    festival.months_since_festival = 1;
+    g_distant_battle.clear();
+    religion.reset();
+    local_cults.reset();
+    buildings.init();
+    figure_clear_all();
+    maintenance.init();
+    resource.init();
+    food_supply.init();
+    g_warning_manager.clear_all();
+    sentiment.init();
+    finance.init();
+    hotkeys_handler.init();
+    g_debug.init();
+    g_city_planner.init();
+    empire_screen = AVAILABLE;
+    bookmarks.reset();
+    common_info_window::register_handlers();
+    kingdome.init();
+    reload_system(animals);
+}
+
+void city_t::reload_objects() {
+    buildings.reload_objects();
+    figures.reload_objects();
+    g_city_planner.init();
+}
+
+void city_t::update_day(simulation_time_t simtime) {
+    sentiment.update_day();
+    criminals_update_day();
+    // After house-crime day update. Tomb-robber steal is figure-tick;
+    // funeral_done is never cleared by steal, so same-day race is harmless.
+    figure_funeral_walker::try_spawn_all(/*force_ignore_road=*/false);
+    plague_update_day();
+    figure_flotsam::spawn_update_day();
+    buildings.update_day();
+    figures_update_day();
+    population.update_day();
+}
+
+void city_t::update_week(simulation_time_t simtime) {
+    resource.consume_food_weekly(simtime);
+    industry.update_nearby_houses_weekly();
+}
+
+void city_t::update_month(simulation_time_t simtime) {
+    migration.update_month();
+    health.update_month();
+    finance.advance_month();
+    resource.consume_food_monthly();
+    resource.advance_month();
+    food_supply.advance_month();
+    update_allowed_foods();
+
+    population.record_monthly();
+
+    local_cults.advance_month();
+    festival.advance_month();
+    buildings.update_month();
+
+    // OG creates the fishing spots once at scenario start; respawning them every month is an Enhanced change.
+    if (game_features::gameplay_change_fishing_points_monthly_respawn.to_bool() && can_produce_resource(RESOURCE_FISH)
+        && !g_scenario.events.blood_river_sweep_active()) {
+        fishing_points.update_month();
+    }
+
+    kingdome.advance_month();
+
+    // Remake-only monthly tomb-robber threat (OG spawns from house crime).
+    if (game_features::gameplay_change_tomb_robber_remake.to_bool()) {
+        figure_tomb_robber::try_spawn(/*force_gates=*/false);
+        figure_tomb_robber::try_professional_wave();
+    }
+}
+
+void city_t::init_custom_map() {
+    unused.faction_id = 1;
+    unused.unknown_00a2 = 1;
+    unused.unknown_00a3 = 1;
+    finance.treasury = g_scenario.startup_funds();
+    finance.last_year.balance = finance.treasury;
+}
+
+void city_t::ratings_update(bool is_yearly_update) {
+    ratings.update_culture_rating();
+    if (is_yearly_update) {
+        kingdome.advance_year();
+    }
+    calculate_max_prosperity();
+
+    if (is_prosperity_update_month(g_simulation.simtime.month)) {
+        update_prosperity_rating();
+    }
+}
+
+// OG temple_complex_ra_kingdom_bonus, right after the yearly ratings.
+void city_t::ra_temple_complex_yearly_favour() {
+    if (buildings.temple_complex_id(BUILDING_TEMPLE_COMPLEX_RA)) {
+        kingdome.change(kingdome_relation_t::params().ra_complex_yearly_bonus);
+    }
+}
+
+void city_t::set_advisor_available(e_advisor advisor, e_availability available) {
+    advisors[advisor] = available;
+}
+
+e_availability city_t::is_advisor_available(e_advisor advisor) const {
+    return advisors[advisor];
+}
+
+void city_t::init_campaign_mission() {
+    finance.treasury = g_scenario.startup_funds();
+    finance.last_year.income.gold_delivered = 0;
+    finance.this_year.income.gold_delivered = 0;
+}
+
+void city_t::init_mission_resources(const resource_allow_vec& resources) {
+    auto fobj = const_cast<full_empire_object*>(ourcity().get_full_empire_object());
+    for (const auto &r: resources) {
+        fobj->add_sell_resource(r.type);
+    }
+}
+
+e_resource city_t::allowed_foods(int i) {
+    return resource.food_types_allowed[i];
+}
+
+void city_t::set_max_happiness(int max) {
+    buildings_house_do([max] (auto house) {
+        if (house->hsize()) {
+            auto &housed = house->runtime_data();
+            housed.house_happiness = std::min<int>(housed.house_happiness, max);
+            housed.house_happiness = calc_bound(housed.house_happiness, 0, 100);
+        }
+    });
+}
+
+void city_t::change_happiness(int amount) {
+    buildings_house_do([amount] (auto house) {
+        if (house->hsize()) {
+            auto &housed = house->runtime_data();
+            housed.house_happiness = calc_bound(housed.house_happiness + amount, 0, 100);
+        }
+    });
+}
+
+struct city_tick_slot {
+    int tick;
+    pcstr name;
+    void (*update)(city_t& city);
+};
+
+static const city_tick_slot city_tick_slots[] = {
+  {1, "religion", [](city_t& c) { c.religion.update(); }},
+  {1, "coverage", [](city_t& c) { c.coverage.update(); }},
+  {2, "tree_growth", [](city_t&) { map_tree_growth_update(); }},
+  {4, "kingdome", [](city_t& c) { c.kingdome.update(); }},
+  {5, "irrigation_value", [](city_t&) { g_irrigation_value.update(); }},
+  {5, "formations", [](city_t&) { formation_update_all(/*skip_morale*/ false); }},
+  {6, "natives_land", [](city_t&) { map_natives_check_land(); }},
+  {7, "road_network", [](city_t& c) { c.map.update_road_network(); }},
+  {8, "stocks", [](city_t&) { g_city.resource.calculate_stocks(); }},
+  {9, "house_service_decay", [](city_t& c) { c.house_decay_services(); }},
+  {10, "desirability", [](city_t&) { g_desirability.update(); }},
+  {11, "trade_export_keep", [](city_t&) { city_trade_update_export_keep(); }},
+  {12, "houses_covered_decay", [](city_t& c) { c.house_service_decay_houses_covered(); }},
+  {16, "storageyard_stocks", [](city_t&) { city_resource_calculate_storageyard_stocks(); }},
+  {17, "food_stocks", [](city_t&) { g_city.resource.calculate_food_stocks_and_supply_wheat(); }},
+  {18, "vegetation_growth", [](city_t&) { map_vegetation_growth_update(); }},
+  {19, "open_water_access", [](city_t& c) { c.buildings_update_open_water_access(); }},
+  {20, "industry_production", [](city_t& c) { c.industry.update_production(); }},
+  {21, "kingdome_access", [](city_t& c) { c.maintenance.check_kingdome_access(); }},
+  {22, "population_room", [](city_t& c) { c.population.update_room(); }},
+  {23, "migration", [](city_t& c) { c.migration.update(); }},
+  {23, "population_migration", [](city_t& c) { c.population.update_migration(); }},
+  {24, "evict_overcrowded", [](city_t& c) { c.population.evict_overcrowded(); }},
+  {25, "labor", [](city_t& c) { c.labor.update(); }},
+  {27, "water_supply", [](city_t& c) { c.buildings.update_water_supply(); }},
+  {28, "religion_supply", [](city_t& c) { c.buildings.update_religion_supply_houses(); }},
+  {29, "formations_skip_morale", [](city_t&) { formation_update_all(/*skip_morale*/ true); }},
+  {30, "crime", [](city_t&) { g_crime.update(); }},
+  {31, "tower_sentry_decay", [](city_t&) { building_barracks_decay_tower_sentry_request(); }},
+  {31, "generate_figures", [](city_t& c) { c.buildings_generate_figure(); }},
+  {32, "empire_traders", [](city_t&) { g_empire_traders.update(); }},
+  {32, "trade", [](city_t& c) { c.trade_update(); }},
+  {33, "building_counters", [](city_t& c) { c.buildings.update_counters(); }},
+  {33, "avg_coverage", [](city_t& c) { c.avg_coverage.update(); }},
+  {33, "health_coverage", [](city_t& c) { c.health.update_coverage(); }},
+  {33, "farms", [](city_t&) { building_industry_update_farms(); }},
+  {34, "distribute_treasury", [](city_t& c) { c.government_distribute_treasury(); }},
+  {35, "house_health", [](city_t& c) { c.house_service_update_health(); }},
+  {36, "culture_aggregates", [](city_t& c) { c.house_service_calculate_culture_aggregates(); }},
+  {37, "malaria_risk", [](city_t&) { g_malaria_risk.update(); }},
+  {38, "building_desirability", [](city_t&) { building_update_desirability(); }},
+  {39, "house_evolve", [](city_t& c) { c.house_process_evolve(); }},
+  {40, "building_state", [](city_t&) { building_update_state(); }},
+  {43, "burning_ruins", [](city_t&) { building_burning_ruin::update_all_ruins(); }},
+  {44, "building_destroying", [](city_t& c) { c.maintenance.check_building_destroying(); }},
+  {44, "reset_protesters", [](city_t& c) { c.sentiment.reset_protesters_criminals(); }},
+  {45, "criminals", [](city_t& c) { c.figures_generate_criminals(); }},
+  {46, "building_malaria_risk", [](city_t&) { building_update_malaria_risk(); }},
+  {48, "house_tax_coverage_decay", [](city_t& c) { c.house_decay_tax_coverage(); }},
+  {49, "avg_coverage", [](city_t& c) { c.avg_coverage.update(); }},
+};
+
+void city_t::update_tick(int simtick) {
+    for (const city_tick_slot& slot : city_tick_slots) {
+        if (slot.tick == simtick) {
+            slot.update(*this);
+        }
+    }
+
+    if (plagues.locusts_countdown > 0) {
+        plagues.locusts_countdown--;
+    }
+    if (plagues.frogs_countdown > 0) {
+        plagues.frogs_countdown--;
+    }
+}
+
+bool city_t::generate_trader_from(empire_city &city) {
+    if (g_city.religion.ra_no_traders_months_left > 0) {
+        return false;
+    }
+
+    if (city.free_trader_slot() < 0) {
+        return false;
+    }
+
+    if (city.trader_entry_delay > 0) {
+        city.trader_entry_delay--;
+        return false;
+    }
+
+    constexpr int sea_default_entry_delay = 30;  // 2 in-game months at 16 days/month
+    constexpr int land_default_entry_delay = 4;
+    const int default_entry_delay = city.is_sea_trade ? sea_default_entry_delay : land_default_entry_delay;
+    city.trader_entry_delay = city.trader_entry_delay_override != 0
+                                ? city.trader_entry_delay_override
+                                : default_entry_delay;
+
+    if (city.is_sea_trade) {
+        // generate ship
+        const bool has_doks = g_city.buildings.has_working_dock();
+        const bool has_river_entry = scenario_map_has_river_entry();
+        const bool can_sea_trade = !city_trade_has_sea_trade_problems();
+        if (has_doks && has_river_entry && can_sea_trade) {
+            g_empire_traders.create_trader(city.route_id, -1);
+            return true;
+        }
+    } else {
+        // generate caravan and donkeys
+        if (!city_trade_has_land_trade_problems()) {
+            // caravan head
+            g_empire_traders.create_trader(city.route_id, -1);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool city_t::is_food_allowed(e_resource resource) {
+    bool result = false;
+    for (int i = 0; i < 4; i++) {
+        if (g_city.allowed_foods(i) == resource) {
+            result = true;
+        }
+    }
+    // for etc etc todo: other resources?
+    return result;
+}
+
+void city_t::set_allowed_food(int i, e_resource r) {
+    resource.food_types_allowed[i] = r;
+}
+
+int stack_units_by_resource(int resource) {
+    switch (resource) {
+    default:
+        return RESOURCE_UNIT_PILE;
+
+    case RESOURCE_GOLD:
+    case RESOURCE_STONE:
+    case RESOURCE_LIMESTONE:
+    case RESOURCE_GRANITE:
+    case RESOURCE_SANDSTONE:
+    case RESOURCE_MARBLE:
+        return RESOURCE_UNIT_BLOCK;
+
+    case RESOURCE_WEAPONS:
+        return RESOURCE_UNIT_WEAPON;
+
+    case RESOURCE_CHARIOTS:
+        return RESOURCE_UNIT_CHARIOT;
+    }
+}
+
+empire_city &city_t::ourcity() {
+    auto const &cities = g_empire.get_cities();
+    auto it = std::find_if(cities.begin(), cities.end(), [] (auto &city) { return (city.in_use && (city.type == EMPIRE_CITY_OURS)); });
+
+    verify_no_crash(it != cities.end());
+    return *it;
+}
+
+bool city_t::can_produce_resource(e_resource resource) {
+    auto &c = ourcity();
+    return c.sells_resource[resource];
+}
+
+void city_t::set_produce_resource(e_resource resource, bool v) {
+    auto &c = ourcity();
+    c.sells_resource[resource] = v;
+}
+
+void city_t::update_allowed_foods() {
+    int food_index = 0;
+
+    std::fill_n(std::begin(resource.food_types_allowed), RESOURCES_FOODS_MAX, RESOURCE_NONE);
+
+    for (e_resource resource = RESOURCES_MIN; resource < RESOURCES_FOODS_MAX; ++resource) {
+        bool can_import_food = g_empire.can_import_resource(resource, false);
+        bool can_produce_food = can_produce_resource(resource);
+        if (can_import_food || can_produce_food) {
+            set_allowed_food(food_index, resource);
+            food_index++;
+        }
+    }
+}
+
+void city_t::house_decay_tax_coverage() {
+    OZZY_PROFILER_FUNCTION();
+    buildings_house_do([&] (building_house *house) {
+        house->decay_tax_coverage();
+    });
+}
+
+void city_t::house_decay_services() {
+    OZZY_PROFILER_FUNCTION();
+    buildings_house_do([] (auto house) {
+        house->decay_services();
+    });
+}
+
+bool city_t::available_resource(e_resource resource) {
+    e_resource raw_resource = get_raw_resource(resource);
+    // finished goods: check imports of raw materials
+    if (raw_resource != resource && g_empire.can_import_resource(raw_resource, false)) {
+        return true;
+    }
+
+    // check if we can produce the raw materials
+    return can_produce_resource(raw_resource);
+}
+
+void city_t::buildings_generate_figure() {
+    OZZY_PROFILER_FUNCTION();
+    figures.house_noble_spawned_this_tick = false;
+    figures.bazaar_figure_pass_index = 0;
+    buildings_valid_do([] (building &b) {
+        switch (b.type) {
+        case BUILDING_UNUSED_NATIVE_HUT_88: {
+            // OG spawn_native_hut: hut image from random bit; native every 5 days when a meeting
+            // is linked and there is road/clear land next to the hut.
+            int native_image = image_id_from_group(GROUP_BUILDING_NATIVE);
+            map_image_set(b.tile, native_image + (map_random_get(b.tile.grid_offset()) & 1));
+            if (b.has_figure_of_type(-1, FIGURE_INDIGENOUS_NATIVE)) {
+                break;
+            }
+            int x_out = 0;
+            int y_out = 0;
+            if (b.native_meeting_center_id > 0
+                && map_terrain_get_adjacent_road_or_clear_land(b.tile.x(), b.tile.y(), b.size, &x_out, &y_out)) {
+                b.figure_spawn_delay++;
+                if (b.figure_spawn_delay > 4) {
+                    b.figure_spawn_delay = 0;
+                    figure *f = figure_create(FIGURE_INDIGENOUS_NATIVE, tile2i(x_out, y_out), DIR_0_TOP_RIGHT);
+                    f->action_state = ACTION_10_NATIVE_CREATED;
+                    f->set_home(b.id);
+                    b.set_figure(BUILDING_SLOT_SERVICE, f);
+                }
+            }
+            break;
+        }
+
+        case BUILDING_UNUSED_NATIVE_MEETING_89:
+            //    map_building_tiles_add(id, x, y, 2,
+            //                           image_id_from_group(GROUP_BUILDING_NATIVE) + 2, TERRAIN_BUILDING);
+            //    if (city_buildings_is_mission_post_operational() && !has_figure_of_type(FIGURE_NATIVE_TRADER)) {
+            //        int x_out, y_out;
+            //        if (map_terrain_get_adjacent_road_or_clear_land(tile.x(), tile.y(), size, &x_out, &y_out)) {
+            //            figure_spawn_delay++;
+            //            if (figure_spawn_delay > 8) {
+            //                figure_spawn_delay = 0;
+            //                figure *f = figure_create(FIGURE_NATIVE_TRADER, x_out, y_out, DIR_0_TOP_RIGHT);
+            //                f->action_state = FIGURE_ACTION_162_NATIVE_TRADER_CREATED;
+            //                f->home() = b;
+            //                figure_id = f->id;
+            //            }
+            //        }
+            //    }
+
+            break;
+        case BUILDING_UNUSED_NATIVE_CROPS_93:
+            // todo
+            //data.industry.progress++;
+            //if (data.industry.progress >= 5) {
+            //    data.industry.progress = 0;
+            //}
+            //
+            //int img_id = building_impl::params(BUILDING_BARLEY_FARM).anim["farmland"].first_img();
+            //map_image_set(tile.grid_offset(), img_id + data.industry.progress);
+            break;
+
+        default:
+            b.dcast()->spawn_figure();
+            break;
+        }
+    });
+
+    if (religion.osiris_double_farm_yield_used) {
+        religion.osiris_double_farm_yield_days = 0;
+        religion.osiris_double_farm_yield_used = false;
+    }
+}
+
+void city_t::plague_update_day() {
+    buildings_house_do([] (auto house) {
+        if (!house->hsize()) {
+            return;
+        }
+
+        if (house->base.has_plague && house->base.disease_days > 0) {
+            house->base.disease_days--;
+            house->base.has_plague = (house->base.disease_days > 0);
+        }
+
+        auto &housed = house->runtime_data();
+        if (housed.frog_infest_days > 0) {
+            housed.frog_infest_days--;
+        }
+    });
+}
+
+void city_t::criminals_update_day() {
+    buildings_house_do([] (auto house) {
+        if (!house->hsize()) {
+            return;
+        }
+
+        int delta;
+        auto &housed = house->runtime_data();
+        if (housed.house_happiness >= 50) {
+            delta = (housed.house_happiness - 50) / 30;
+        } else if (housed.house_happiness < 50) {
+            delta = -std::max<int>((50 - housed.house_happiness) / 10, 0);
+        }
+
+        housed.criminal_active += delta;
+        housed.criminal_active = std::clamp<int>(housed.criminal_active, 0, 100);
+    });
+}
+
+void city_t::before_start_simulation() {
+    events::emit(event_population_changed{ population.current });
+    events::emit(event_finance_changed{ finance.treasury });
+}
+
+void city_t::reset_overlay() {
+    current_overlay = OVERLAY_NONE;
+    previous_overlay = OVERLAY_NONE;
+}
+
+void city_t::toggle_overlay() {
+    std::swap(previous_overlay, current_overlay);
+    map_clear_highlights();
+}
+
+void city_t::set_overlay(e_overlay overlay) {
+    if (overlay == OVERLAY_NONE) {
+        previous_overlay = current_overlay;
+    } else {
+        previous_overlay = OVERLAY_NONE;
+    }
+    current_overlay = overlay;
+    map_clear_highlights();
+}
+
+const city_overlay *city_t::overlay() {
+    return city_overlay::get(current_overlay);
+}
+
+
+void city_t::houses_reset_demands() {
+    houses.missing.fountain = 0;
+    houses.missing.well = 0;
+    houses.missing.entertainment = 0;
+    houses.missing.more_entertainment = 0;
+    houses.missing.education = 0;
+    houses.missing.more_education = 0;
+    houses.missing.religion = 0;
+    houses.missing.second_religion = 0;
+    houses.missing.third_religion = 0;
+    houses.missing.dentist = 0;
+    houses.missing.courthouse = 0;
+    houses.missing.any_courthouse = 0;
+    houses.missing.health = 0;
+    houses.missing.more_health = 0;
+    houses.missing.food = 0;
+    // OG city_houses_reset_demands leaves houses_missing_second_luxury alone too.
+
+    houses.requiring.school = 0;
+    houses.requiring.library = 0;
+    houses.requiring.dentist = 0;
+    houses.requiring.courthouse = 0;
+    houses.requiring.more_courthouse = 0;
+    houses.requiring.health = 0;
+    houses.requiring.religion = 0;
+}
+
+// Save version 199+ (and OG .sav files): the city_player record exactly as OG city_player_types.h lays it out
+// (offsets checked against its offsetof asserts). Our fields without an OG field live in OG reserved bytes:
+// in place where they already sat in a reserved range, otherwise packed from 0x2D14 inside OG reserved_13.
+static void city_data_bind_og_layout(io_buffer* iob) {
+    auto& data = g_city;
+    int tmp = 0;
+    iob->bind(BIND_SIGNATURE_RAW, &data.unused.other_player, 18904);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a0);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a1);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a2);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a4);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.unknown_value);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a7);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a6);
+    iob->bind(BIND_SIGNATURE_INT8, &data.finance.tax_percentage);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.treasury.value);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.value);
+    iob->bind(BIND_SIGNATURE_INT32, &data.health.target_value);
+    iob->bind(BIND_SIGNATURE_INT32, &data.health.value);
+    iob->bind(BIND_SIGNATURE_INT32, &data.health.num_mortuary_workers);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.current);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_year);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.school_age);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.academy_age);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.total_capacity);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.room_in_houses);
+    for (int i = 0; i < 2400; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.population.monthly.values[i]);
+    }
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.monthly.next_index);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.monthly.count);
+    for (int i = 0; i < 100; i++) {
+        iob->bind(BIND_SIGNATURE_UINT16, &data.population.at_age[i]);
+    }
+    for (int i = 0; i < 20; i++) {
+        iob->bind(BIND_SIGNATURE_UINT16, &data.population.at_level[i]);
+        iob->bind____skip(2);
+    }
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.yearly_births);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.yearly_deaths);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.lost_removal);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.immigration_amount_per_batch);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.emigration_amount_per_batch);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.emigration_queue_size);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.immigration_queue_size);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.lost_homeless);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_change);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.average_per_year);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.total_all_years);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.people_in_shanties);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.people_in_manors);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.total_years);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.yearly_update_requested);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_used_house_add);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_used_house_remove);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.immigrated_today);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.emigrated_today);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.refused_immigrants_today);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.migration.percentage);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unused_27d0);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.migration.emigration_duration);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.migration.immigration_duration);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.migration.newcomers);
+    iob->bind____skip(6);
+    for (int i = 0; i < 3; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_27e0[i]);
+    }
+    iob->bind(BIND_SIGNATURE_INT16, &data.unused.unknown_27f0);
+    iob->bind____skip(2);
+    for (int i = 0; i < 18; i++) {
+        iob->bind(BIND_SIGNATURE_INT16, &data.unused.unknown_27f4[i]);
+    }
+    iob->bind(BIND_SIGNATURE_INT32, data.map.entry_point);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, data.map.exit_point);
+    iob->bind____skip(16);
+    iob->bind(BIND_SIGNATURE_INT16, &data.unused.unknown_2828);
+    iob->bind____skip(2);
+    for (int i = 0; i < RESOURCES_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.space_in_storages[i + 1]);
+    }
+    for (int i = 0; i < RESOURCES_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.stored_in_storages[i + 1]);
+    }
+    for (int i = 0; i < RESOURCES_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.resource.trade_status[i + 1]);
+        iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    }
+    for (int i = 0; i < RESOURCES_MAX; i++)
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.trading_amount[i + 1]);
+    for (int i = 0; i < RESOURCES_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.resource.mothballed[i + 1]);
+        iob->bind____skip(1);
+    }
+    iob->bind(BIND_SIGNATURE_INT16, &data.unused.unused_28ca);
+    iob->bind____skip(20);
+    for (int i = 0; i < RESOURCES_MAX; i++)
+        iob->bind(BIND_SIGNATURE_INT16, &data.resource.unk_00[i]);
+    iob->bind____skip(298);
+    for (int i = 0; i < RESOURCES_MAX; i++)
+        iob->bind(BIND_SIGNATURE_INT32, &data.resource.stockpiled[i]);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.food_supply_months);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.granaries.operating);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.percentage_plebs);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.working_age);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.workers_available);
+    for (int i = 0; i < LABOR_CATEGORY_SAVE_SLOTS; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].workers_needed);
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].workers_allocated);
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].total_houses_covered);
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].buildings);
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].priority);
+    }
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.workers_employed);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.workers_unemployed);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.unemployment_percentage);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.unemployment_percentage_for_goverment);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.workers_needed);
+    iob->bind(BIND_SIGNATURE_INT8, &data.finance.wages);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.finance.wages_kingdome);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_2b6c);
+    iob->bind____skip(12);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.taxed_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.taxed_nobles);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.untaxed_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.untaxed_nobles);
+    iob->bind(BIND_SIGNATURE_INT8, &data.taxes.percentage_taxed_citizens);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.taxes.percentage_taxed_nobles);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.taxes.percentage_taxed_people);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.yearly.collected_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.yearly.collected_nobles);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.yearly.uncollected_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.yearly.uncollected_nobles);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.income.taxes);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.income.taxes);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.monthly.collected_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.monthly.uncollected_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.monthly.collected_nobles);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.monthly.uncollected_nobles);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.income.exports);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.income.exports);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.imports);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.imports);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT16, &data.finance.interest_so_far);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.interest);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.interest);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.stolen);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.stolen);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.construction);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.construction);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.accountant_salary);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.accountant_salary);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.salary_amount);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.salary_rank);
+    iob->bind____skip(3);
+    iob->bind_u16(data.finance.this_year.expenses.mayour_salary);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.income.total);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.income.total);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.expenses.total);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.expenses.total);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.net_in_out);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.net_in_out);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.balance);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.balance);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.cheated_money);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.estimated_uncollected);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.festivals);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.festivals);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.kingdome);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.kingdome);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.tribute);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.tribute);
+    iob->bind____skip(18);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.wages_so_far);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.wages);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.wages);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.income.gold_delivered);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.income.gold_delivered);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.disasters);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.disasters);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_day_current);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.migration.nobles_leave_city_this_year);
+    iob->bind____skip(2);
+    for (int i = 0; i < RESOURCES_FOODS_MAX; i++)
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.food_types_available[i]);
+    iob->bind____skip(2);
+    for (int i = 0; i < RESOURCES_FOODS_MAX; i++)
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.food_types_eaten[i]);
+    iob->bind_u16(data.kingdome.campaign_carry_personal_savings); // savings carried over to next mission
+    iob->bind(BIND_SIGNATURE_UINT8, &data.figures.fish_number);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.debt_state);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.months_in_debt);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.lost_troop_request);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.message_delay);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.rating_cap);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.military.native_attack_duration);
+    iob->bind(BIND_SIGNATURE_INT32, &data.religion.bast_curse_active);
+    iob->bind(BIND_SIGNATURE_INT32, &data.religion.seth_crush_enemy_troops);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.monument_riot_cause);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.kingdome.invasion.duration_day_countdown);
+    iob->bind(BIND_SIGNATURE_INT8, &data.kingdome.invasion.warnings_given);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.invasion.days_until_invasion);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.invasion.retreat_message_shown);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.invasion.favour_only);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.invasion.cheated);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.ratings.monument_years_of_monument);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.egyptian_months_to_travel_forth);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.city_foreign_months_left);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.triumphal_obelisk_available);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.won_count);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.enemy_months_traveled);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.egyptian_months_traveled);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.triumphal_obelisk_placed);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.invasion.count);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.invasion.size);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.kingdome.invasion.soldiers_killed);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.military.infantry_batalions);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_INT8, &god_osiris.sank_ships);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.percentage_by_sentiment);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT32, &data.migration.population_cap);
+    iob->bind_u8((uint8_t&)g_distant_battle.dispatched_army.state);
+    iob->bind_u8(g_distant_battle.dispatched_army.await_soldiers);
+    iob->bind_u8(g_distant_battle.dispatched_army.position_index);
+    iob->bind____skip(1);
+    iob->bind_i16(g_distant_battle.source_request_event_id);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage_common);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_OSIRIS]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_RA]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_PTAH]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_SETH]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_BAST]);
+    iob->bind____skip(5376);
+    for (int i = 0; i < 8; i++)
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.houses_requiring_unknown_to_evolve[i]); // ????
+    iob->bind(BIND_SIGNATURE_INT32, &data.trade.caravan_import_resource);
+    iob->bind(BIND_SIGNATURE_INT32, &data.trade.caravan_backup_import_resource);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.culture);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.prosperity);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.monument);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.rating);
+    iob->bind____skip(8);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.prosperity_trend);
+    iob->bind____skip(20);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.monument_num_criminals);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.monument_num_rioters);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.fountain);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.well);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.more_entertainment);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.more_education);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.education);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.school);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.library);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.dentist);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.courthouse);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.food);
+    for (int i = 0; i < 2; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_4294[i]);
+    }
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.health);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.more_health);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.dentist);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.courthouse);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.health);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.second_religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.third_religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.booth_shows);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.booth_no_shows_weighted);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.bandstand_shows);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.bandstand_no_shows_weighted);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.pavilion_shows);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.pavilion_no_shows_weighted);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.senet_house_plays);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.senet_house_no_shows_weighted);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.venue_needing_shows);
+    iob->bind(BIND_SIGNATURE_INT32, &data.avg_coverage.average_entertainment);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.entertainment);
+    iob->bind(BIND_SIGNATURE_INT8, &data.festival.months_since_festival); // ok
+    iob->bind____skip(3);
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].target_mood);
+    }
+    iob->bind____skip(5);
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].mood);
+    }
+    iob->bind____skip(5);
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].wrath_bolts);
+    }
+    iob->bind____skip(55);
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].months_since_festival);
+        iob->bind____skip(3);
+    }
+    iob->bind____skip(20);
+    iob->bind(BIND_SIGNATURE_INT32, &data.religion.least_happy_god);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT8, &data.migration.no_immigration_cause);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.protesters);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.criminals);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.houses.health);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.education);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.entertainment);
+    iob->bind(BIND_SIGNATURE_INT32, &data.figures.rioters);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.culture_explanation);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.prosperity_explanation);
+    iob->bind____skip(16);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.player_rank);
+    iob->bind____skip(3);
+    iob->bind_u16(data.kingdome.personal_savings); // ok
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.income.donated);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.income.donated);
+    iob->bind____skip(30);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.figures.animals_number);
+    iob->bind____skip(21);
+    iob->bind(BIND_SIGNATURE_INT32, &data.trade.docker_import_resource);
+    iob->bind(BIND_SIGNATURE_INT32, &data.trade.docker_export_resource);
+    iob->bind____skip(56);
+    iob->bind(BIND_SIGNATURE_INT32, &g_scenario.has_won);
+    iob->bind(BIND_SIGNATURE_INT32, &g_scenario.continue_months_left);
+    iob->bind(BIND_SIGNATURE_INT32, &g_scenario.continue_months_chosen);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.wage_rate_paid_this_year);
+    iob->bind____skip(8);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.finance.tribute_not_paid_last_year);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.finance.tribute_not_paid_total_years);
+    iob->bind____skip(11);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.festival.planned_size);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.festival.months_till_next);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.festival.planned_god);
+    iob->bind____skip(23);
+    iob->bind(BIND_SIGNATURE_INT32, &data.avg_coverage.average_religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.avg_coverage.average_education);
+    iob->bind(BIND_SIGNATURE_INT32, &data.avg_coverage.average_health);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.festival.first_festival_effect_months);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.festival.second_festival_effect_months);
+    iob->bind____skip(7);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.sentiment.unemployment_pct);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.previous_value); // ok
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.low_mood_cause);
+    iob->bind(BIND_SIGNATURE_INT32, &data.figures.security_breach_duration);
+    iob->bind____skip(20);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.months_since_gift); // ok
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.gift_overdose_penalty);
+    iob->bind____skip(28);
+    iob->bind(BIND_SIGNATURE_INT8, &data.kingdome.kingdom_salary_penalty);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.kingdome.kingdom_milestone_penalty);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.kingdome.kingdom_ignored_request_penalty);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.rating_last_year);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.kingdom_change);
+    iob->bind____skip(11);
+    iob->bind(BIND_SIGNATURE_INT32, &data.buildings.mission_post_operational);
+    iob->bind(BIND_SIGNATURE_UINT32, data.buildings.main_native_meeting);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.wage_rate_paid_last_year);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.food_needed_per_month); // 62
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.granaries.understaffed);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.granaries.not_operating);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.granaries.not_operating_with_food);
+    iob->bind____skip(16);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_150_export_profits_months_left);
+    iob->bind____skip(11);
+    iob->bind(BIND_SIGNATURE_INT32, &data.religion.angry_message_delay);
+    iob->bind____skip(16);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.estimated_income);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_UINT32, data.buildings.distribution_center);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.buildings.distribution_center_building_id);
+    iob->bind(BIND_SIGNATURE_INT32, &data.buildings.distribution_center_placed);
+    iob->bind____skip(43);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.fishing_boats_requested);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.warships_requested);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.transport_ships_requested);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT16, &data.figures.enemies);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT8, &data.sentiment.wages);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.population.people_in_huts);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.population.people_in_residences);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.figures.kingdome_soldiers);
+    iob->bind____skip(18);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.ratings.monument_destroyed_buildings);
+    iob->bind____skip(6);
+    iob->bind(BIND_SIGNATURE_UINT8, &g_distant_battle.battle.city);
+    iob->bind(BIND_SIGNATURE_UINT8, &g_distant_battle.battle.enemy_strength);
+    iob->bind(BIND_SIGNATURE_UINT8, &g_distant_battle.battle.egyptian_strength);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.months_until_battle);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.egyptian_months_to_travel_back);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.total_count);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.military.total_batalions);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.military.kingdome_service_batalions);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.military.total_soldiers);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.buildings.trade_center_building_id);
+    iob->bind(BIND_SIGNATURE_INT32, &data.figures.soldiers);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.sound.march_enemy);
+    iob->bind(BIND_SIGNATURE_INT8, &data.sound.march_horse);
+    iob->bind____skip(10);
+    iob->bind(BIND_SIGNATURE_INT8, &data.sentiment.include_huts);
+    iob->bind____skip(16);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.highest_ever);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.estimated_wages);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.luxury_goods_kinds);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.ratings.prosperity_max);
+    iob->bind____skip(3);
+    for (int i = 0; i < 10; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.map.largest_road_networks[i].id); // ????
+        iob->bind(BIND_SIGNATURE_INT32, &data.map.largest_road_networks[i].size);
+    }
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.second_luxury);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.entertainment.senet_house_has_plays);
+    iob->bind____skip(6);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.entertainment.senet_house_message_shown);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.entertainment.pavilion_message_shown);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.emigration_message_shown);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.mission.fired_message_shown);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.mission.victory_message_shown);
+    iob->bind____skip(15);
+    iob->bind(BIND_SIGNATURE_INT32, &data.figures.attacking_natives);
+    iob->bind____skip(28);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.more_courthouse);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.any_courthouse);
+    iob->bind____skip(16);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.crimes_this_month);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.gold_stolen_this_month);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.food_supply.hunting_lodges_working);
+    iob->bind(BIND_SIGNATURE_INT32, &data.food_supply.game_meat_last_month);
+    iob->bind(BIND_SIGNATURE_INT32, &data.food_supply.game_meat_this_month);
+    iob->bind(BIND_SIGNATURE_INT32, &data.food_supply.fishing_wharfs_working);
+    iob->bind(BIND_SIGNATURE_INT32, &data.food_supply.fish_last_month);
+    iob->bind(BIND_SIGNATURE_INT32, &data.food_supply.fish_this_month);
+    iob->bind____skip(28);
+    iob->bind(BIND_SIGNATURE_UINT32, data.buildings.festival_square);
+    iob->bind____skip(16);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_no_traders_months_left);
+    iob->bind____skip(97);
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].happy_ankhs);
+    }
+    iob->bind____skip(33);
+    for (int i = 0; i < RESOURCES_FOODS_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_INT16, &data.resource.granary_food_stored[i]);
+        iob->bind____skip(2);
+    }
+    iob->bind____skip(292);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_slightly_increased_trading_months_left);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_harshly_reduced_trading_months_left);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_slightly_reduced_trading_months_left);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.seth_protect_player_troops_months);
+    iob->bind____skip(7);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.osiris_double_farm_yield_days);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.osiris_flood_will_destroy_active);
+    iob->bind____skip(63);
+    verify_no_crash(iob->get_offset() == 37808);
+}
+
+io_buffer* iob_city_data = new io_buffer([](io_buffer* iob, size_t version) {
+    if (g_chunk_io.get_file_format() != FILE_FORMAT_SAVE_FILE_EXT || version >= 199) {
+        city_data_bind_og_layout(iob);
+        return;
+    }
+
+    auto &data = g_city;
+    iob->bind(BIND_SIGNATURE_RAW, &data.unused.other_player, 18904);
+    verify_no_crash(iob->get_offset() == 18904);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a0);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a1);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a2);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a4);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.unknown_value);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a7);
+    iob->bind(BIND_SIGNATURE_INT8, &data.unused.unknown_00a6);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_day_current);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.value);
+    iob->bind(BIND_SIGNATURE_INT32, &data.health.target_value);
+    iob->bind(BIND_SIGNATURE_INT32, &data.health.value);
+    iob->bind(BIND_SIGNATURE_INT32, &data.health.num_mortuary_workers);
+    int tmp = 0;
+    iob->bind(BIND_SIGNATURE_UINT16, &tmp);
+    iob->bind(BIND_SIGNATURE_UINT16, &tmp);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.current);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_year);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.school_age);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.academy_age);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.total_capacity);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.room_in_houses);
+
+    for (int i = 0; i < 2400; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.population.monthly.values[i]);
+    }
+
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.monthly.next_index);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.monthly.count);
+
+    for (int i = 0; i < 100; i++) {
+        iob->bind(BIND_SIGNATURE_UINT16, &data.population.at_age[i]);
+    }
+
+    for (int i = 0; i < 20; i++) {
+        iob->bind(BIND_SIGNATURE_UINT16, &data.population.at_level[i]);
+        iob->bind____skip(2);
+    }
+
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.yearly_births);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.yearly_deaths);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.lost_removal);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.immigration_amount_per_batch);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.immigration_amount_per_batch);
+    iob->bind____skip(1);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.emigration_amount_per_batch);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.emigration_queue_size);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.immigration_queue_size);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.lost_homeless);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_change);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.average_per_year);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.total_all_years);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.people_in_shanties);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.people_in_manors);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.total_years);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.yearly_update_requested);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_used_house_add);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.last_used_house_remove);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.immigrated_today);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.emigrated_today);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.refused_immigrants_today);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.migration.percentage);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unused_27d0);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.migration.immigration_duration);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.migration.emigration_duration);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.migration.newcomers);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.migration.nobles_leave_city_this_year);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.unused.unused_27d0_short);
+
+    for (int i = 0; i < 3; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_27e0[i]);
+    }
+
+    iob->bind(BIND_SIGNATURE_INT16, &data.unused.unknown_27f0);
+    iob->bind____skip(2); 
+    for (int i = 0; i < 18; i++) {
+        iob->bind(BIND_SIGNATURE_INT16, &data.unused.unknown_27f4[i]);
+    }
+    iob->bind(BIND_SIGNATURE_INT32, data.map.entry_point);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, data.map.exit_point);
+    iob->bind____skip(4);
+    iob->bind____skip(4);  // iob->bind(BIND_SIGNATURE_INT32, data.buildings.palace_point);
+    iob->bind____skip(4);
+    iob->bind____skip(4);  // iob->bind(BIND_SIGNATURE_INT32, &data.buildings.palace_building_id);
+    iob->bind(BIND_SIGNATURE_INT16, &data.unused.unknown_2828);
+    iob->bind____skip(2);
+    for (int i = 0; i < RESOURCES_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.space_in_storages[i + 1]);
+    }
+
+    for (int i = 0; i < RESOURCES_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.stored_in_storages[i + 1]);
+    }
+
+    for (int i = 0; i < RESOURCES_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.resource.trade_status[i + 1]);
+        iob->bind(BIND_SIGNATURE_UINT8, &tmp);
+    }
+
+    for (int i = 0; i < RESOURCES_MAX; i++)
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.trading_amount[i + 1]);
+
+    for (int i = 0; i < RESOURCES_MAX; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.resource.mothballed[i + 1]);
+        iob->bind____skip(1);
+    }
+
+    iob->bind(BIND_SIGNATURE_INT16, &data.unused.unused_28ca);
+
+    //    iob->bind____skip(20);
+    //    for (int i = 0; i < RESOURCES_MAX; i++)
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.resource.unk_00[i + 1]);
+    //    for (int i = 0; i < RESOURCES_FOODS_MAX; i++)
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.resource.granary_food_stored[i]);
+    //    iob->bind____skip(28); // temp
+
+    iob->bind____skip(20);
+    for (int i = 0; i < RESOURCES_MAX; i++)
+        iob->bind(BIND_SIGNATURE_INT16, &data.resource.unk_00[i]);
+    for (int i = 0; i < RESOURCES_FOODS_MAX; i++)
+        iob->bind(BIND_SIGNATURE_INT16, &data.resource.granary_food_stored[i]);
+    iob->bind____skip(28); // temp
+
+    for (int i = 0; i < RESOURCES_FOODS_MAX; i++)
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.food_types_available[i]);
+
+    for (int i = 0; i < RESOURCES_FOODS_MAX; i++)
+        iob->bind(BIND_SIGNATURE_UINT16, &data.resource.food_types_eaten[i]);
+
+    iob->bind____skip(216);
+
+    for (int i = 0; i < RESOURCES_MAX; i++)
+        iob->bind(BIND_SIGNATURE_INT32, &data.resource.stockpiled[i]);
+
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.food_supply_months);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.granaries.operating);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.percentage_plebs);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.working_age);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.workers_available);
+    for (int i = 0; i < LABOR_CATEGORY_SAVE_SLOTS; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].workers_needed);
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].workers_allocated);
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].total_houses_covered);
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].buildings);
+        iob->bind(BIND_SIGNATURE_INT32, &data.labor.categories[i].priority);
+    }
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.workers_employed);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.workers_unemployed);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.unemployment_percentage);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.unemployment_percentage_for_goverment);
+    iob->bind(BIND_SIGNATURE_INT32, &data.labor.workers_needed);
+    iob->bind(BIND_SIGNATURE_INT8, &data.finance.wages);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.finance.wages_kingdome);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_2b6c);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.taxed_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.taxed_nobles);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.untaxed_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.untaxed_nobles);
+    iob->bind(BIND_SIGNATURE_INT8, &data.taxes.percentage_taxed_citizens);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.taxes.percentage_taxed_nobles);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.taxes.percentage_taxed_people);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.yearly.collected_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.yearly.collected_nobles);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.yearly.uncollected_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.yearly.uncollected_nobles);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.income.taxes);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.income.taxes);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.monthly.collected_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.monthly.uncollected_citizens);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.monthly.collected_nobles);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.monthly.uncollected_nobles);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.income.exports);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.income.exports);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.imports);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.imports);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT16, &data.finance.interest_so_far);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.interest);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.interest);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.stolen);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.stolen);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.construction);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.construction);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.accountant_salary);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.accountant_salary);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.salary_amount);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.salary_rank);
+    iob->bind____skip(3);
+    iob->bind_u16(data.finance.this_year.expenses.mayour_salary);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.income.total);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.income.total);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.expenses.total);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.expenses.total);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.net_in_out);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.net_in_out);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.balance);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.balance);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.last_year.income.donated);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.cheated_money);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.estimated_income);
+    iob->bind(BIND_SIGNATURE_INT32, &data.taxes.estimated_uncollected);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.estimated_wages);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.festivals);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.festivals);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.kingdome);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.kingdome);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.wage_rate_paid_this_year);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.tribute);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.tribute);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT8, &data.finance.tax_percentage);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.treasury.value);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.finance.tribute_not_paid_last_year);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.finance.tribute_not_paid_total_years);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.wage_rate_paid_last_year);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.wages_so_far);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.wages);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.wages);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.income.gold_delivered);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.income.gold_delivered);
+    iob->bind____skip(2);
+    verify_no_crash(iob->get_offset() == 30440);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.this_year.expenses.disasters);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.finance.last_year.expenses.disasters);
+    for (int i = 0; i < 1380; i++)
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_2c20[i]);
+    for (int i = 0; i < 8; i++)
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.houses_requiring_unknown_to_evolve[i]); // ????
+    iob->bind(BIND_SIGNATURE_INT32, &data.trade.caravan_import_resource);
+    iob->bind(BIND_SIGNATURE_INT32, &data.trade.caravan_backup_import_resource);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.culture);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.prosperity);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.monument);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.rating);
+    iob->bind____skip(8);
+    iob->bind____skip(4);
+    iob->bind____skip(20);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.monument_num_criminals);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.monument_num_rioters);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.fountain);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.well);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.more_entertainment);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.more_education);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.education);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.school);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.library);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_4284);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.dentist);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.courthouse);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.food);
+
+    for (int i = 0; i < 2; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_4294[i]);
+    }
+
+    iob->bind____skip(4); // was senet_house_placed
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.health);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.more_health);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.dentist);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.courthouse);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.health);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.second_religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.third_religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.requiring.religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.booth_shows);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.booth_no_shows_weighted);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.bandstand_shows);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.bandstand_no_shows_weighted);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.pavilion_shows);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.pavilion_no_shows_weighted);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.senet_house_plays);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.senet_house_no_shows_weighted);
+    iob->bind(BIND_SIGNATURE_INT32, &data.entertainment.venue_needing_shows);
+    iob->bind(BIND_SIGNATURE_INT32, &data.avg_coverage.average_entertainment);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.entertainment);
+    iob->bind(BIND_SIGNATURE_INT8, &data.festival.months_since_festival); // ok
+    iob->bind____skip(3);
+
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].target_mood);
+    }
+
+    iob->bind____skip(5);
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].mood);
+    }
+
+    iob->bind____skip(5);
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].wrath_bolts);
+    }
+
+    iob->bind____skip(20);
+    iob->bind____skip(35);
+    //    for (int i = 0; i < MAX_GODS; i++)
+    //        city_data.religion.gods[i].unused1 = main->read_i8();
+    //    for (int i = 0; i < MAX_GODS; i++)
+    //        city_data.religion.gods[i].unused2 = main->read_i8();
+    //    for (int i = 0; i < MAX_GODS; i++)
+    //        city_data.religion.gods[i].unused3 = main->read_i8();
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].months_since_festival);
+        iob->bind____skip(3);
+    }
+
+    iob->bind(BIND_SIGNATURE_INT32, &data.religion.least_happy_god);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_4334);
+    iob->bind(BIND_SIGNATURE_INT8, &data.migration.no_immigration_cause);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.protesters);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.criminals);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.houses.health);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.education);
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.entertainment);
+    iob->bind(BIND_SIGNATURE_INT32, &data.figures.rioters);
+    iob->bind____skip(20);
+    iob->bind____skip(4); // (BIND_SIGNATURE_INT32, &data.ratings.selected);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.culture_explanation);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.prosperity_explanation);
+    iob->bind____skip(4); // bind(BIND_SIGNATURE_INT32, &data.ratings.monument_explanation);
+    iob->bind____skip(1); // bind(BIND_SIGNATURE_UINT8, &data.kingdome.kingdom_explanation);
+    iob->bind____skip(3);
+    iob->bind____skip(8);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.player_rank);
+    iob->bind____skip(3);
+    iob->bind_u16(data.kingdome.personal_savings); // ok
+    iob->bind_u16(data.kingdome.campaign_carry_personal_savings); // savings carried over to next mission
+    //    for (int i = 0; i < 2; i++)
+    //        iob->bind(BIND_SIGNATURE_INT32, &city_data.unused.unknown_4374[i]);
+    //    iob->bind(BIND_SIGNATURE_INT32, &city_data.finance.last_year.income.donated);
+    //    iob->bind(BIND_SIGNATURE_INT32, &city_data.finance.this_year.income.donated);
+    //        for (int i = 0; i < 2; i++)
+    //            iob->bind(BIND_SIGNATURE_INT32, &city_data.unused.unknown_4374[i]);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.finance.this_year.income.donated);
+
+    for (int i = 0; i < 2; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_4374[i]);
+    }
+
+    tmp = 0;
+    for (int i = 0; i < 10; i++) {
+        iob->bind(BIND_SIGNATURE_INT16, &tmp); // dock id
+    }
+
+    iob->bind____skip(2); // (BIND_SIGNATURE_INT16, &data.buildings.temple_complex_placed);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.figures.fish_number);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.figures.animals_number);
+
+    for (int i = 0; i < 3; i++) {
+        iob->bind(BIND_SIGNATURE_INT16, &data.unused.unknown_439c[i]);
+    }
+
+    iob->bind____skip(2);
+    iob->bind____skip(2);
+    iob->bind____skip(2);  // iob->bind(BIND_SIGNATURE_INT16, &data.buildings.palace_placed);
+    iob->bind____skip(2);
+    iob->bind____skip(2);
+    iob->bind____skip(2);
+    iob->bind____skip(2);
+    iob->bind____skip(2);
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.trade.num_sea_routes);
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.trade.num_land_routes);
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.trade.sea_trade_problem_duration);
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.trade.land_trade_problem_duration);
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.building.working_docks);
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.building.senate_placed);
+    //        iob->bind(BIND_SIGNATURE_INT16, &city_data.building.working_wharfs);
+
+    for (int i = 0; i < 2; i++) {
+        iob->bind(BIND_SIGNATURE_INT8, &data.unused.padding_43b2[i]);
+    }
+    iob->bind____skip(2);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT32, &data.trade.docker_import_resource);
+    iob->bind(BIND_SIGNATURE_INT32, &data.trade.docker_export_resource);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.debt_state);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.months_in_debt);
+    iob->bind____skip(4);
+    iob->bind____skip(4); // BIND_SIGNATURE_UINT32, data.buildings.recruiter.tile);
+    iob->bind____skip(4); // (BIND_SIGNATURE_INT32, &data.buildings.recruiter.building_id);
+    iob->bind____skip(4); // (BIND_SIGNATURE_INT32, &data.buildings.recruiter.placed);
+    iob->bind(BIND_SIGNATURE_UINT32, data.buildings.festival_square);
+
+    for (int i = 0; i < 4; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_43d8[i]);
+    }
+
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.lost_troop_request);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_43f0);
+    iob->bind(BIND_SIGNATURE_INT32, &g_scenario.has_won);
+    iob->bind(BIND_SIGNATURE_INT32, &g_scenario.continue_months_left);
+    iob->bind(BIND_SIGNATURE_INT32, &g_scenario.continue_months_chosen);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind____skip(1); // bind(BIND_SIGNATURE_UINT8, &data.festival.selected_god);
+    iob->bind____skip(3);
+    iob->bind____skip(1); // bind(BIND_SIGNATURE_UINT8, &data.festival.selected_size); // ????
+    iob->bind____skip(6);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.festival.planned_size);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.festival.months_till_next);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.festival.planned_god);
+    iob->bind____skip(3);
+    iob->bind____skip(20); // legacy: small/large/grand/grand_alcohol/not_enough_alcohol (scripts + runtime recompute)
+    iob->bind(BIND_SIGNATURE_INT32, &data.avg_coverage.average_religion);
+    iob->bind(BIND_SIGNATURE_INT32, &data.avg_coverage.average_education);
+    iob->bind(BIND_SIGNATURE_INT32, &data.avg_coverage.average_health);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.festival.first_festival_effect_months);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.festival.second_festival_effect_months);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unused_4454);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.sentiment.unemployment_pct);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.previous_value); // ok
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.message_delay);
+    iob->bind(BIND_SIGNATURE_INT32, &data.sentiment.low_mood_cause);
+    iob->bind(BIND_SIGNATURE_INT32, &data.figures.security_breach_duration);
+    for (int i = 0; i < 4; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_446c[i]);
+    }
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.months_since_gift); // ok
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.gift_overdose_penalty);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unused_4488);
+
+    iob->bind____skip(4); // iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.gifts[GIFT_MODEST].id);
+    iob->bind____skip(4); // iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.gifts[GIFT_GENEROUS].id);
+    iob->bind____skip(4); // iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.gifts[GIFT_LAVISH].id);
+    iob->bind____skip(4); // iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.gifts[GIFT_MODEST].cost);
+    iob->bind____skip(4); // iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.gifts[GIFT_GENEROUS].cost);
+    iob->bind____skip(4); // iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.gifts[GIFT_LAVISH].cost);
+    iob->bind(BIND_SIGNATURE_INT8, &data.kingdome.kingdom_salary_penalty);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.kingdome.kingdom_milestone_penalty);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT8, &data.kingdome.kingdom_ignored_request_penalty);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.rating_last_year);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.rating_cap);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.kingdom_change);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.military.native_attack_duration);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unused_native_force_attack);
+    iob->bind(BIND_SIGNATURE_INT32, &data.buildings.mission_post_operational);
+    iob->bind(BIND_SIGNATURE_UINT32, data.buildings.main_native_meeting);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.food_needed_per_month); // 62
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.granaries.understaffed);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.granaries.not_operating);
+    iob->bind(BIND_SIGNATURE_INT32, &data.resource.granaries.not_operating_with_food);
+
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+
+    iob->bind(BIND_SIGNATURE_INT32, &data.religion.bast_curse_active);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unused_44ec);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_150_export_profits_months_left);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.religion.seth_crush_enemy_troops);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unused_44f8);
+    iob->bind(BIND_SIGNATURE_INT32, &data.religion.angry_message_delay);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_INT32, &data.ratings.monument_riot_cause);
+    iob->bind____skip(4);
+    iob->bind____skip(4); //iob->bind(BIND_SIGNATURE_INT32, &data.mission.tutorial_senate_built); // ok
+    iob->bind(BIND_SIGNATURE_UINT32, data.buildings.distribution_center);
+    iob->bind(BIND_SIGNATURE_INT32, &data.buildings.distribution_center_building_id);
+    iob->bind(BIND_SIGNATURE_INT32, &data.buildings.distribution_center_placed);
+
+    iob->bind____skip(4 * 11);
+
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.fishing_boats_requested);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.warships_requested);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.transport_ships_requested);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_INT16, &data.figures.enemies);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT8, &data.sentiment.wages);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.population.people_in_huts);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.population.people_in_residences);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.figures.kingdome_soldiers);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.kingdome.invasion.duration_day_countdown);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_INT8, &data.kingdome.invasion.warnings_given);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.invasion.days_until_invasion);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.invasion.retreat_message_shown);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.invasion.favour_only);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.kingdome.invasion.cheated);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.ratings.monument_destroyed_buildings);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.ratings.monument_years_of_monument);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT8, &g_distant_battle.battle.city);
+    iob->bind(BIND_SIGNATURE_UINT8, &g_distant_battle.battle.enemy_strength);
+    iob->bind(BIND_SIGNATURE_UINT8, &g_distant_battle.battle.egyptian_strength);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.months_until_battle);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.egyptian_months_to_travel_back);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.egyptian_months_to_travel_forth);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.city_foreign_months_left);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.triumphal_obelisk_available);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.total_count);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.won_count);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.enemy_months_traveled);
+    iob->bind(BIND_SIGNATURE_INT8, &g_distant_battle.battle.egyptian_months_traveled);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.military.total_batalions);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.military.kingdome_service_batalions);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.unused.unknown_458e);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.military.total_soldiers);
+    iob->bind(BIND_SIGNATURE_INT8, &data.buildings.triumphal_obelisk_placed);
+    // The Caesar III sound counters (data.sound) only pace sound effects; they stay runtime state and their
+    // bytes are written as zeros, as OG writes its reserved_47/48/49 here.
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.buildings.trade_center_building_id);
+    iob->bind(BIND_SIGNATURE_INT32, &data.figures.soldiers);
+    iob->bind____skip(9);
+    iob->bind____skip(10);
+    iob->bind(BIND_SIGNATURE_INT8, &data.sentiment.include_huts);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.invasion.count);
+    iob->bind(BIND_SIGNATURE_INT32, &data.kingdome.invasion.size);
+    iob->bind(BIND_SIGNATURE_UINT16, &data.kingdome.invasion.soldiers_killed);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.military.infantry_batalions);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.population.highest_ever);
+    iob->bind____skip(4);
+    iob->bind____skip(1);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.ratings.prosperity_max);
+    iob->bind____skip(3);
+    for (int i = 0; i < 10; i++) {
+        iob->bind(BIND_SIGNATURE_INT32, &data.map.largest_road_networks[i].id); // ????
+        iob->bind(BIND_SIGNATURE_INT32, &data.map.largest_road_networks[i].size);
+    }
+    iob->bind(BIND_SIGNATURE_INT32, &data.houses.missing.second_luxury);
+    iob->bind(BIND_SIGNATURE_INT8, &god_osiris.sank_ships);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.entertainment.senet_house_has_plays);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.entertainment.senet_house_message_shown);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.entertainment.pavilion_message_shown);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.emigration_message_shown);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.migration.percentage_by_sentiment);
+    iob->bind____skip(2);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.mission.fired_message_shown);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.mission.victory_message_shown);
+    iob->bind____skip(4);
+    iob->bind____skip(4);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_INT32, &data.migration.population_cap);
+    iob->bind(BIND_SIGNATURE_INT32, &data.figures.attacking_natives);
+
+    iob->bind_u8((uint8_t&)g_distant_battle.dispatched_army.state);
+    iob->bind_u8(g_distant_battle.dispatched_army.await_soldiers);
+    iob->bind_u8(g_distant_battle.dispatched_army.position_index);
+    // Was pad; persist troop-ask ↔ distant-battle link across save/load (Akhenaten).
+    iob->bind_i16(g_distant_battle.source_request_event_id);
+    iob->bind____skip(43);
+    iob->bind____skip(68);
+    iob->bind(BIND_SIGNATURE_UINT32, data.buildings.festival_square);
+    iob->bind____skip(4);
+    iob->bind____skip(8);
+    iob->bind____skip(4);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_no_traders_months_left);
+    iob->bind____skip(3);
+    iob->bind____skip(92);
+    int reserved = 0;
+    iob->bind(BIND_SIGNATURE_INT16, &reserved);
+
+    for (int i = 0; i < MAX_GODS; i++) {
+        iob->bind(BIND_SIGNATURE_UINT8, &data.religion.gods[i].happy_ankhs);
+    }
+
+    iob->bind____skip(33);
+    iob->bind____skip(2); // 2800 --> 0     granary space?
+    iob->bind____skip(30);
+    iob->bind____skip(2); // 400 --> 0      granary used (game meat)?
+    iob->bind____skip(288);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage_common);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_OSIRIS]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_RA]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_PTAH]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_SETH]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.coverage[GOD_BAST]);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_slightly_increased_trading_months_left);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_harshly_reduced_trading_months_left);
+    iob->bind____skip(1);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.ra_slightly_reduced_trading_months_left);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.seth_protect_player_troops_months);
+    iob->bind____skip(7);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.osiris_double_farm_yield_days);
+    iob->bind____skip(3);
+    iob->bind(BIND_SIGNATURE_UINT8, &data.religion.osiris_flood_will_destroy_active);
+    iob->bind____skip(3);
+    iob->bind____skip(57);
+    verify_no_crash(iob->get_offset() == 37808);
+});
+
+io_buffer* iob_city_data_extra = new io_buffer([](io_buffer* iob, size_t version) {
+    auto &data = g_city;
+    iob->bind(BIND_SIGNATURE_INT16, &data.unused.faction_bytes[0]);
+    iob->bind(BIND_SIGNATURE_INT16, &data.unused.faction_bytes[1]);
+    iob->bind(BIND_SIGNATURE_XSTR, data.kingdome.player_name_adversary, MAX_PLAYER_NAME);
+    iob->bind(BIND_SIGNATURE_XSTR, data.kingdome.player_name, MAX_PLAYER_NAME);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.faction_id);
+});
+
+io_buffer *iob_labor_storage_priority = new io_buffer([](io_buffer *iob, size_t version) {
+    iob->bind(BIND_SIGNATURE_INT32, &g_city.labor.categories[LABOR_CATEGORY_STORAGE].priority);
+}, [](size_t version) {
+    // before the labor split, STORAGE had no priority of its own
+    g_city.labor.categories[LABOR_CATEGORY_STORAGE].priority = 0;
+});
+
+io_buffer *iob_enhanced_religion = new io_buffer([](io_buffer *iob, size_t version) {
+    auto &lc = g_city.local_cults;
+    for (int i = 0; i < LOCAL_CULT_MAX; ++i) {
+        iob->bind(BIND_SIGNATURE_UINT8, &lc.cults[i].unlocked);
+        iob->bind(BIND_SIGNATURE_UINT8, &lc.cults[i].active);
+        iob->bind(BIND_SIGNATURE_UINT8, &lc.cults[i].appeased_months);
+        iob->bind(BIND_SIGNATURE_UINT8, &lc.cults[i].reserved);
+    }
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.mission_restricts);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.farm_bonus_months);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.war_bonus_months);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.craft_bonus_months);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.planned_theme);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.planned_cult);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.last_rite_month);
+    iob->bind(BIND_SIGNATURE_INT16, &lc.last_rite_year);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.last_rite_index);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.reserved_pad[0]);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.reserved_pad[1]);
+    iob->bind(BIND_SIGNATURE_UINT8, &lc.reserved_pad[2]);
+    // 4*4 + 13 = 29; pad to 64
+    iob->bind____skip(35);
+}, [](size_t version) {
+    // pre-Enhanced saves have no local cults and no festival calendar state
+    g_city.local_cults = {};
+});
+
+io_buffer* iob_city_graph_order = new io_buffer([](io_buffer* iob, size_t version) {
+    auto &data = g_city;
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_order);
+    iob->bind(BIND_SIGNATURE_INT32, &data.unused.unknown_order);
+});
+
+io_buffer *iob_city_bookmarks = new io_buffer([] (io_buffer *iob, size_t version) {
+    auto &data = g_city;
+    static_assert(data.bookmarks.MAX_BOOKMARKS == 4);
+    // OG layout: {int32 grid_offset, int32 unused} per bookmark; OG keeps the second at -1.
+    // Our .svx before v194 kept 4 tiles instead.
+    const bool og_layout = g_chunk_io.get_file_format() != FILE_FORMAT_SAVE_FILE_EXT || version >= 194;
+    for (int i = 0; i < data.bookmarks.MAX_BOOKMARKS; i++) {
+        tile2i& point = data.bookmarks.points[i];
+        if (!og_layout) {
+            iob->bind_tile(point);
+            continue;
+        }
+
+        int32_t offset = point.valid() ? point.grid_offset() : -1;
+        int32_t unused = -1;
+        iob->bind(BIND_SIGNATURE_INT32, &offset);
+        iob->bind(BIND_SIGNATURE_INT32, &unused);
+        if (iob->is_read_access()) {
+            point = offset >= 0 ? tile2i(offset) : tile2i::invalid;
+        }
+    }
+});
+
+// The first 64 bytes held the 16 cloud positions; they live in the "clouds" chunk now (v200) and
+// these bytes are written as zero.
+io_buffer* iob_city_utilities_data = new io_buffer([](io_buffer* iob, size_t version) {
+    iob->bind____skip(64);
+    iob->bind____skip(36);
+    iob->bind____skip(900);
+});
+
+io_buffer *iob_building_list_large = new io_buffer([] (io_buffer *iob, size_t version) {
+    iob->bind____skip(6000);
+    g_scenario.bind_data(iob, version, 2000);
+});
+
+pcstr city_player_name() {
+    return g_city.kingdome.player_name.c_str();
+}
+
+void city_set_player_name(xstring name) {
+    g_city.kingdome.player_name = name;
+}
+
+void city_restore_campaign_player_name() {
+    g_city.kingdome.player_name = g_city.kingdome.campaign_player_name;
+}
+
+mission_result_t city_make_mission_result(int scenario_id) {
+    mission_result_t result;
+
+    result.scenario_id = scenario_id;
+    result.rating_culture = g_city.ratings.culture;
+    result.rating_prosperity = g_city.ratings.prosperity;
+    result.rating_kingdom = g_city.kingdome.rating;
+    result.final_population = g_city.population.current;
+    result.final_funds = g_city.finance.treasury;
+    result.completion_months = (uint32_t)(g_simulation.simtime.years_since_start() * simulation_time_t::months_in_year
+                                          + g_simulation.simtime.month + 1);
+    result.difficulty = game_difficulty();
+    result.player_name = g_city.kingdome.player_name;
+
+    return result;
+}
+
+struct cproperty {
+    xstring domain;
+    xstring name;
+
+    std::function<bvariant(const xstring &)> handler;
+};
+
+bvariant city_get_property(xstring domain, xstring name) {
+    static cproperty cproperties[] = {
+        { tags().city, "population", [] (const xstring&) { return bvariant(g_city.population.current); }},
+        { tags().city, "population_kids", [] (const xstring&) { return bvariant(g_city.population.school_age); }},
+        { tags().city, "population_youngs", [] (const xstring&) { return bvariant(g_city.population.academy_age); }},
+        { tags().city, "treasury", [] (const xstring&) { return bvariant(g_city.finance.treasury); }},
+        { tags().rating, tags().culture, [] (const xstring &) { return bvariant(g_city.ratings.culture); }},
+        { tags().rating, tags().prosperity, [] (const xstring &) { return bvariant(g_city.ratings.prosperity); }},
+        { tags().rating, tags().monument, [] (const xstring &) { return bvariant(g_city.ratings.monument); }},
+        { tags().rating, tags().kingdom, [] (const xstring &) { return bvariant(g_city.kingdome.rating); }},
+        //{ tags().player, "rank_name", [] (const xstring&) { return bvariant(ui::str(52, g_city.kingdome.salary_rank + 4)); }},
+        //{ tags().player, "salary_amount", [] (const xstring&) { return bvariant(g_city.kingdome.salary_amount); }},
+        { tags().city, "months_since_festival", [] (const xstring&) { return bvariant(g_city.festival.months_since_festival); }},
+        { tags().city, "workers_needed", [] (const xstring&) { return bvariant(g_city.labor.workers_needed); }},
+        { tags().city, "workers_diff", [] (const xstring&) { return bvariant(g_city.labor.workers_unemployed - g_city.labor.workers_needed); }},
+    };
+
+    for (const auto &prop : cproperties) {
+        if (prop.domain != domain) {
+            continue;
+        }
+
+        if (prop.name == name) {
+            return prop.handler(name);
+        }
+    }
+
+    return bvariant();
+}
+
+bvariant city_t::get_property(xstring domain, xstring name) const {
+    return city_get_property(domain, name);
+}
+
+void city_t::on_post_load() {
+    buildings.on_post_load();
+    figures.on_post_load();
+    kingdome.on_post_load();
+    city_trade_update_export_keep();
+}
+
+void city_t::figures_update_day() {
+    figure_valid_do([] (figure &f) {
+        f.dcast()->update_day();
+    });
+}
+
+bool city_t::determine_granary_get_foods(resource_list &foods, int road_network) {
+    if (g_scenario.kingdom_supplies_grain) {
+        return false;
+    }
+
+    foods.clear();
+    buildings_valid_do([&] (building &b) {
+        building_granary *granary = b.dcast_granary();
+        verify_no_crash(granary);
+        if (!granary->has_road_access()) {
+            return;
+        }
+
+        if (!building_granary_touches_network(b, road_network)) {
+            return;
+        }
+
+        const int pct_workers = granary->worker_percentage();
+        if (pct_workers < 100 || granary->amount(RESOURCE_NONE) < 100) {
+            return;
+        }
+
+        if (!granary->is_empty_all()) {
+            return;
+        }
+
+        for (const auto &r: resource_list::foods) {
+            if (granary->is_getting(r.type)) {
+                foods[r.type] = 1;
+            }
+        }
+    }, BUILDING_GRANARY);
+
+    return foods.any();
+}

@@ -1,0 +1,21 @@
+name: Akhenaten layer check
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  layers:
+    name: run on linux
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: check include layers
+      run: |
+        g++ -std=c++17 -O2 tools/check_layers.cpp -o check_layers
+        ./check_layers

@@ -1,0 +1,47 @@
+name: Akhenaten Build Linux
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    name: run on linux
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: update-workspace
+      run: |
+        sudo apt -qq update
+        sudo apt install --yes cmake build-essential libgl1-mesa-dev libssl-dev libasound2-dev libpulse-dev meson ninja-build nasm
+    - name: build-project
+      run: |
+        mkdir linux_build
+        mkdir linux_build/data
+        cmake --preset linux-gcc-release-make
+        cmake --build --preset linux-gcc-release-make --target akhenaten -- -j$(nproc)
+        cp ./build/akhenaten ./linux_build/akhenaten.linux
+        if [ -f ./build/tools/innoextract/bin/innoextract ]; then
+          cp ./build/tools/innoextract/bin/innoextract ./linux_build/innoextract
+          chmod +x ./linux_build/innoextract
+        elif [ -f ./build/innoextract ]; then
+          cp ./build/innoextract ./linux_build/innoextract
+          chmod +x ./linux_build/innoextract
+        else
+          curl -fsSL -o /tmp/inno-linux.tar.gz \
+            "https://github.com/dalerank/innoextract-nb/releases/download/v1.0.0/innoextract-linux-x64.tar.gz"
+          tar -xzf /tmp/inno-linux.tar.gz -C ./linux_build
+          chmod +x ./linux_build/innoextract
+        fi
+        cp ./data/pharaoh_fonts_pack.sgx ./linux_build/data/pharaoh_fonts_pack.sgx
+        cp ./data/pharaoh_custom_pack.sgx ./linux_build/data/pharaoh_custom_pack.sgx
+        cp ./data/pharaoh_houses_pack.sgx ./linux_build/data/pharaoh_houses_pack.sgx
+        cp ./data/neucha.ttf ./linux_build/data/neucha.ttf
+    - uses: actions/upload-artifact@v6
+      with:
+        name: linux_build
+        path: linux_build
