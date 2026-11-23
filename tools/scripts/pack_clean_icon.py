@@ -25,7 +25,7 @@ print('png sig    :', icon_bytes[:8].hex())
 nro_pack.pack_nro(ELF, OUT,
                   icon_png=ICON,  # read again inside pack_nro, same clean bytes
                   title='Pharaoh+Cleopatra',
-                  author='千叶黑猫/lsyymmilo',
+                  author='dalerank/lsyymmilo/千叶黑猫',
                   version='RA-Switch-1.0')
 
 # verify what actually landed in the nro
@@ -42,4 +42,4 @@ print('match source file :', hashlib.md5(embedded).hexdigest() == hashlib.md5(ic
 print('embedded sig      :', embedded[:8].hex())
 nacp = data[idx + nacp_off: idx + nacp_off + min(nacp_size, 0x3000)]
 txt = nacp.decode('utf-8', 'replace')
-print('title ok:', 'Pharaoh+Cleopatra' in txt, ' author ok:', '千叶黑猫/lsyymmilo' in txt)
+print('title ok:', 'Pharaoh+Cleopatra' in txt, ' author ok:', 'dalerank/lsyymmilo/千叶黑猫' in txt)

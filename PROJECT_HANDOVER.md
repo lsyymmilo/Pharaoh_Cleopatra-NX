@@ -1,7 +1,7 @@
 # 法老王 (Pharaoh) Switch 移植项目 — 交接文档
 
-> 最后更新：2026-11-23（V1.0 发布：安装包/安装说明重打并输出至
-> E:\法老王NS移植版\；UNPAK 探针版仍待真机定位卡点）
+> 最后更新：2026-11-23（第四十八轮：署名改为 dalerank/lsyymmilo/千叶黑猫
+> 三作者——nro/安装包重打并六处同步；仓库已公开）
 > 用途：换账号/新会话/新电脑后，AI 助手或开发者读完本文档即可无缝继续调试。
 > 阅读顺序：先看「当前状态」→「下一步」→ 需要背景再看「已修复清单」。
 
@@ -844,6 +844,21 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       ③ helper `--file=` 路径必须用正斜杠（反斜杠会被 helper 串解析吃掉）。
     - GitHub 侧：仓库由 API 创建（POST /user/repos）；SSH key 注册因经典 token
       缺 admin:public_key scope 未做（~/.ssh 下生成的未使用密钥已清理）。
+
+48. **署名变更为三作者：dalerank/lsyymmilo/千叶黑猫**（第四十八轮）：
+    - 动机：署名致谢上游引擎作者 dalerank（Akhenaten），并保留用户双署名。
+    - 改动：pack_clean_icon.py 的 author 参数与 NACP 验证行（.temp 原件 +
+      tools\scripts 入库快照同步）；安装说明两处作者行（头部队游戏名/作者、
+      尾部签署行）。
+    - nro 重打：直嵌图标铁律不变（内嵌 MD5=73c04754... 与 12.png 原图一致），
+      title=Pharaoh+Cleopatra、version=RA-Switch-1.0 不变，author 已验证入 NACP。
+      **nro MD5：8A02AFBF...（四十八轮前）→ 7443C4319243028BF003F58AAE395FC8（现）**，
+      六处一致（output、sdcard\switch 两处、workspace_deliverables、工作空间交付、
+      E 盘裸 nro）。
+    - 安装包重打：1353 条目，zip 内 nro=7443C431 复核一致，
+      **zip MD5：C7B7A0498AA8F81DF068B0B62EA789D2**（旧 93C88C3C... 作废），
+      zip 内说明署名已验证。
+    - 用户侧提醒：SD 卡两处 nro 需重拷；已装转发器的需删除重装才会显示新作者。
 
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
