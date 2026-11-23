@@ -834,9 +834,12 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       -c http.sslBackend=openssl -c http.sslCAInfo=C:/pharaoh-build/tools/PortableGit/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem push`
       cred.txt 内容=`https://lsyymmilo:<PAT>@github.com`（用完即删）。
     - **三个坑（均已实证）**：① Watt Toolkit 类加速器运行时会把 github.com 全域
-      hosts 到 127.0.0.1 并自签证书反代——git 直连报 schannel 吊销失败/openssl
-      验签失败，**push 前须退出加速器**（退出时它会自动清 hosts）；② PortableGit
-      系统配置自带 GCM helper，其存留的旧 OAuth 凭据（gho_…，已失效）优先于
+      hosts 到 127.0.0.1 并自签证书反代——直连报 schannel 吊销失败/openssl
+      验签失败。两条可行路径（均已实证）：**a) 关闭加速器**（它会自动清 hosts）
+      用 openssl+仓库 CA 直连；**b) 保持加速器运行**，改用
+      `-c http.sslBackend=schannel -c http.schannelCheckRevoke=false`
+      走本地反代（Windows 信任库认其自签 CA，禁吊销检查）；
+      ② PortableGit 系统配置自带 GCM helper，其存留的旧 OAuth 凭据（gho_…，已失效）优先于
       后配 helper 导致 401——命令必须以 `-c credential.helper=`（空值）重置链条；
       ③ helper `--file=` 路径必须用正斜杠（反斜杠会被 helper 串解析吃掉）。
     - GitHub 侧：仓库由 API 创建（POST /user/repos）；SSH key 注册因经典 token
