@@ -818,7 +818,9 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       等 5 条）”“存档 ASCII 转义”节。
 
 47. **GitHub 私有仓库同步建立**（第二十九轮续，网络操作）：
-    - 远端：`https://github.com/lsyymmilo/Pharaoh_Cleopatra-NX`（私有），分支 main，
+    - 远端：`https://github.com/lsyymmilo/Pharaoh_Cleopatra-NX`（2026-11-23 起公开；
+      建仓时私有，公开前完成密钥/版权审计——无真实密钥、无游戏本体资源、
+      Akhenaten LICENSE.txt 随源码携带），分支 main，
       首次推送 6817 文件（commit 702c758 + 文档修正 commit）。
     - git 工具：`tools\PortableGit\cmd\git.exe`（便携完整版 2.56.1，自带 OpenSSL +
       CA 包 + ssh-keygen；MinGit 精简版缺 ssh-keygen 已弃用）。两者均不入库。
