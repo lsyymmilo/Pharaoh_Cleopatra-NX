@@ -17,10 +17,10 @@ src/gcc-src/
 Thumbs.db
 desktop.ini
 
-# ===== ·ÏÆú½»¸¶Îï¸±±¾£¨²»Èë¿â£©=====
+# ===== åºŸå¼ƒäº¤ä»˜ç‰©å‰¯æœ¬ï¼ˆä¸å…¥åº“ï¼‰=====
 workspace_deliverables/*.zip
 workspace_deliverables/*.nro
 
-# ===== ·ÏÆú½»¸¶Îï¸±±¾£¨²»Èë¿â£©=====
-workspace_deliverables/*.zip
-workspace_deliverables/*.nro
+# ===== æœ¬åœ° git å·¥å…·ï¼ˆä¸å…¥åº“ï¼‰=====
+tools/MinGit/
+tools/PortableGit/

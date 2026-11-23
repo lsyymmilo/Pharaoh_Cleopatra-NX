@@ -817,6 +817,29 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       本版不读取；新增“从旧版升级（删旧 akhenaten.nro/cfg）”“已知问题（UNPAK 不可点
       等 5 条）”“存档 ASCII 转义”节。
 
+47. **GitHub 私有仓库同步建立**（第二十九轮续，网络操作）：
+    - 远端：`https://github.com/lsyymmilo/Pharaoh_Cleopatra-NX`（私有），分支 main，
+      首次推送 6817 文件（commit 702c758 + 文档修正 commit）。
+    - git 工具：`tools\PortableGit\cmd\git.exe`（便携完整版 2.56.1，自带 OpenSSL +
+      CA 包 + ssh-keygen；MinGit 精简版缺 ssh-keygen 已弃用）。两者均不入库。
+    - 入库范围：src\Akhenaten-master（补丁引擎，185MB）、SDL（74MB，含自制
+      Switch 渲染后端）、dkp/dkp-newlib（libnx + S_ISREG 补丁版 libstdc++）、libs、
+      switch_port、tools\scripts（.temp 关键脚本入库快照——执行仍以 .temp 原件为准）、
+      build_switch.py、本文档；排除：游戏包与产物（output/build）、工具链（tc/hostcc/
+      msys64，可从官网再生）、gcc-src（769MB）、.temp、废弃交付物副本。
+    - **推送命令模板**（schannel 后端在本机不可用，必须 openssl + 仓库内 CA）：
+      `git -c credential.helper= -c credential.helper=store --file=C:/pharaoh-build/.temp/cred.txt
+      -c http.sslBackend=openssl -c http.sslCAInfo=C:/pharaoh-build/tools/PortableGit/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem push`
+      cred.txt 内容=`https://lsyymmilo:<PAT>@github.com`（用完即删）。
+    - **三个坑（均已实证）**：① Watt Toolkit 类加速器运行时会把 github.com 全域
+      hosts 到 127.0.0.1 并自签证书反代——git 直连报 schannel 吊销失败/openssl
+      验签失败，**push 前须退出加速器**（退出时它会自动清 hosts）；② PortableGit
+      系统配置自带 GCM helper，其存留的旧 OAuth 凭据（gho_…，已失效）优先于
+      后配 helper 导致 401——命令必须以 `-c credential.helper=`（空值）重置链条；
+      ③ helper `--file=` 路径必须用正斜杠（反斜杠会被 helper 串解析吃掉）。
+    - GitHub 侧：仓库由 API 创建（POST /user/repos）；SSH key 注册因经典 token
+      缺 admin:public_key scope 未做（~/.ssh 下生成的未使用密钥已清理）。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
