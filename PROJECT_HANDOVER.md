@@ -1107,6 +1107,15 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       zip MD5 **FC095D2A8930EE8C6495FFCAB43D2295**；已归档 `nro_history/r02_A78F8727`。
     - 待真机确认：微推能否稳定停在单个图标上、快速大幅移动是否跟手。
 
+60. **指针提速**（第六十轮，真机反馈"顺滑了但偏慢"）：
+    - 参数调整（`switch_input.cpp`）：`slowdown` 340→**245**（全推 8.2px/帧，
+      约 2 秒横穿屏幕）、`gamma` 1.6→**1.45**（中高段更跟手，低速仍可微调）、
+      `smoothing` 0.55→**0.62**（略降平滑延迟）；死区 0.16 与 ZL×3/ZR÷8 不变。
+    - 可调参数速查（改一处再编译即可，约 1 分钟出包）：`slowdown` 越小越快、
+      `gamma` 越小越线性（1.0=完全线性）、`smoothing` 越大越跟手但越抖。
+    - nro MD5 **46934F20032CFE7D241A14B758A79963**，zip MD5 **D0C83FD0EDD588E34FA7748D73224FC0**；
+      已归档 `nro_history/r03_46934F20`。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
