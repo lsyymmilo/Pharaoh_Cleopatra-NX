@@ -979,9 +979,36 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       schannelCheckRevoke=false）；本机 PortableGit 仅 schannel 后端（openssl
       不可用，此前"openssl 成功"的记录实为 MinGit 时代）；token 用后已删文件，
       旧 token 已失效。
-    - **待推送（第五十二轮）**：本地 main 头提交＝"第二批汉化"（提交信息含 i18n: 第二批汉化），工作区干净；
+    - **待推送（第五十二轮）**：本地 main 头提交＝"第二批汉化"，工作区干净；
       推送到 github.com/lsyymmilo/Pharaoh_Cleopatra-NX 需用户提供新 PAT 并开启加速器，
-      命令模板见交接文档 GitHub 段（schannel + credential.helper 清空 + 临时 cred 文件）。
+      命令模板见上文 GitHub 段（schannel + credential.helper 清空 + 临时 cred 文件）。
+
+53. **第三批汉化：en 表 1462 条全部补齐，界面英文清零**（第五十三轮）：
+    - 范围：localization_en.js 相对 ch 表缺失的全部 1462 条——行人台词（渔船/猎人/
+      石匠/木匠/砖匠/祭司/士兵/敌人兵种等 30 余类）、房屋升降级原因（cannot_evolve/
+      run_out/lost_access 系列）、覆盖度描述（*_access 系列）、分项储备（grain/pottery
+      等 10 组×4）、敌人评论（enemy_sword/transport/warship/chariot/archer/spearman）、
+      敌国兵种名（迦南/库施/赫梯/波斯/亚述/利比亚/努比亚/腓尼基/罗马/海上民族/
+      喜克索斯/蛮族）、商品名 48 条、地区名 16 条（克里特/迦南/努比亚…）、
+      使命目标（mission0-5）、快速决战/贿赂/赠礼/上报问题/铁志等窗口、
+      五神城市评论、AD/BC、法老台词、青蛙与西塞罗驴/柏拉图浮木彩蛋等。
+    - 工具链：export_all_missing.py 导出分组清单（translate_all.txt）→
+      patch_ch_batch3a/3b/3c/3d.py 追加 1466 键（含 4 个带尾随空格的特殊键
+      #lost_access_to_library 等——en 表键名本身带尾随空格，必须原样匹配）。
+      旧脚本 set(load_keys()) 把元组当键导致覆盖校验误报，check_coverage.py 已修正。
+    - 陷阱提示：**代码若用 en 表原文键查找，键名里的尾随空格也必须出现在 ch 表**。
+    - 字体白名单：新增 367 个 CJK 字符（万专丛东严丧举…鳄鸟鸡鸵鹰麦黄齐齿），
+      symbols 2954→3321，源码 CJK 共 1708 字全覆盖。
+    - 构建：resources 7/7（15.69MB）、game 835/835、link ok、图标直嵌一致。
+    - nro MD5 **93972A2F1E33B5DCF0FE4CA32B5BBEE4**（26,929,235 B，六处一致），
+      zip MD5 **2F509A07D96520B604A759AA8906973B**（387.3MB，1353 条目）。
+    - 至此 ch 表 1937 键（en 表 1928 键全覆盖 + 自有扩展键），语言名/月份/日期 AD-BC
+      全中文。剩余英文仅可能来自：localization_base_*（原版 group/id 文本，base_ch 已
+      基本齐全）、eventmsg/game_messages 事件消息（ch 版已内置）。
+    - **待推送**：第二、三批汉化均在本地 main；推送需用户提供新 PAT 并开启加速器。
+    - 遗留：Setup.mp3 "Out of memory" 未修；game_messages_ch 与 en 的键级差异未逐条
+      核对（总量大且中文版已存在，优先级低）。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
