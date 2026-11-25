@@ -1116,6 +1116,16 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     - nro MD5 **46934F20032CFE7D241A14B758A79963**，zip MD5 **D0C83FD0EDD588E34FA7748D73224FC0**；
       已归档 `nro_history/r03_46934F20`。
 
+61. **指针再提速 30% + 取消触摸双击右键**（第六十一轮，真机日志 fps=30 正常）：
+    - 速度：`slowdown` 245→**188**（全推 10.6px/帧 × 30fps ≈ 319px/s，横穿屏幕约 3 秒）。
+    - 触摸：删除 `switch_handle_touch()` 的**双击→右键**分支（原 <320ms、<40px 判定），
+      现在每次点击都是纯左键；`last_tap_*` 状态变量一并删除。
+    - 右键来源确认：engine 的 `touch_input_t::to_mouse()` 在 Switch 上直接返回 false
+      （触摸完全由 `switch_handle_touch` 驱动），因此删掉该分支后触摸不再产生右键；
+      外接 USB 鼠标的物理右键不受影响。
+    - nro MD5 **456A45CEEC8D178FE28DF64EC3C9BE4C**，zip MD5 **549DF077F6FFDF4C631044219BCED7C5**；
+      已归档 `nro_history/r04_456A45CE`。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍

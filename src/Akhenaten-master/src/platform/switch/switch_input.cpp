@@ -66,16 +66,13 @@ static void switch_cursor_ensure_init(void) {
 // windowID 0: SDL's renderer event watch only remaps events whose windowID
 // matches the renderer window, so our already-logical coords pass straight to
 // the engine (and the drawn cursor) with no second scaling.
-// Single tap = left button; double tap (<320 ms, <40 px apart) = right button.
-// NOTE: the Switch touch panel is single-touch hardware — two-finger taps
-// cannot be read; double tap is the equivalent gesture.
+// Single tap = left button. Double tap is NOT mapped to right button any more
+// (user request): every tap is a plain left click, so a fast second tap just
+// clicks again instead of turning into a context-menu right click.
 static void switch_handle_touch(void) {
     static int touch_was_down = 0;
     static int touch_left_down = 0;
     static int touch_probe_logged = 0;
-    static Uint32 last_tap_tick = 0;
-    static int last_tap_x = -1000;
-    static int last_tap_y = -1000;
 
     HidTouchScreenState ts;
     size_t n = hidGetTouchScreenStates(&ts, 1);
@@ -113,20 +110,13 @@ static void switch_handle_touch(void) {
         SDL_PushEvent(&ev);
 
         if (!touch_was_down) {
-            const Uint32 now = SDL_GetTicks();
-            const int dx = x - last_tap_x;
-            const int dy = y - last_tap_y;
-            const bool is_double = last_tap_tick && (now - last_tap_tick) < 320
-                && dx > -40 && dx < 40 && dy > -40 && dy < 40;
-
 #if defined(GAME_PLATFORM_NSWITCH)
             {
                 static int s_tap_probes = 0;
                 if (s_tap_probes < 8) {
                     s_tap_probes++;
-                    switch_boot_log("inp: tap raw=(%d,%d) logical=(%d,%d) screen=%dx%d%s",
-                                    ts.touches[0].x, ts.touches[0].y, x, y, lw, lh,
-                                    is_double ? " double->right" : " left");
+                    switch_boot_log("inp: tap raw=(%d,%d) logical=(%d,%d) screen=%dx%d left",
+                                    ts.touches[0].x, ts.touches[0].y, x, y, lw, lh);
                 }
             }
 #endif
@@ -137,22 +127,10 @@ static void switch_handle_touch(void) {
             ev.button.state = SDL_PRESSED;
             ev.button.x = x;
             ev.button.y = y;
-            if (is_double) {
-                // Right click as one complete press+release; the tap's left
-                // click is suppressed (touch_left_down stays 0 until release).
-                ev.button.button = SDL_BUTTON_RIGHT;
-                ev.button.clicks = 2;
-                SDL_PushEvent(&ev);
-                ev.type = SDL_MOUSEBUTTONUP;
-                ev.button.state = SDL_RELEASED;
-                SDL_PushEvent(&ev);
-                last_tap_tick = 0; // a third quick tap starts a new single tap
-            } else {
-                ev.button.button = SDL_BUTTON_LEFT;
-                ev.button.clicks = 1;
-                SDL_PushEvent(&ev);
-                touch_left_down = 1;
-            }
+            ev.button.button = SDL_BUTTON_LEFT;
+            ev.button.clicks = 1;
+            SDL_PushEvent(&ev);
+            touch_left_down = 1;
         }
         touch_was_down = 1;
     } else if (touch_was_down) {
@@ -170,9 +148,6 @@ static void switch_handle_touch(void) {
         }
         touch_was_down = 0;
         touch_left_down = 0;
-        last_tap_tick = SDL_GetTicks();
-        last_tap_x = cursor_window_x;
-        last_tap_y = cursor_window_y;
     }
 }
 
@@ -468,11 +443,11 @@ void switch_handle_analog_sticks(void) {
         }
 
         // Analog-cursor speed: joystick rescale caps |axis| at 2000, so slowdown
-        // is the px-per-frame divisor in LOGICAL space (960x540). 245 ≈ 8.2 px
-        // per frame at full tilt (screen crossed in ~2 s); gamma 1.45 keeps the
-        // low end around 0.6–2 px/frame so small buttons stay clickable.
-        // ZL (fast) ×3, ZR (slow) ÷8.
-        int slowdown = 245;
+        // is the px-per-frame divisor in LOGICAL space (960x540). 188 ≈ 10.6 px
+        // per frame at full tilt (the game runs 30 fps, so ~319 px/s: screen
+        // crossed in ~3 s); gamma 1.45 keeps the low end around 0.7–2.5 px/frame
+        // so small buttons stay clickable. ZL (fast) ×3, ZR (slow) ÷8.
+        int slowdown = 188;
         if (fast_mouse) {
             slowdown /= 3;
         }
