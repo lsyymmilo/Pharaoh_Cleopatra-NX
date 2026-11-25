@@ -1014,6 +1014,30 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     - 遗留：Setup.mp3 "Out of memory" 未修；game_messages_ch 与 en 的键级差异未逐条
       核对（总量大且中文版已存在，优先级低）。
 
+54. **第四批：基础文本表整表修复 + 窗口模板 ${} 修复**（第五十四轮，真机截图驱动）：
+    - 真机 17 张截图里剩余英文全部来自 **localization_base_ch.js**（原版 group/id 文本），
+      而非 key 表：`Overseer of Monuments`(4.13)、`Choose an Egyptian Name:`(13.8)、
+      `Begin Family History`(293.7)、`Return to main menu`(292.4)、
+      `Click on any item…`(61.218)、`Patron God`(187.2)、`years`(298.9)、
+      `Cleopatra`(294.42)、`Ptolemy XV`(151.124)、`Empty land`+空地说明(70.20/70.42)、
+      任务简报长句(305.0)。**根因**：base 表缺 240 条 + 原文件条目格式不统一，
+      游戏侧解析数组时读不全 → 缺失项回退 en。
+    - 处理：`.temp\normalize_base_ch.py` 把 474KB 的 base_ch 全量规范化重写
+      （6539→6779 条、补逗号、json 转义、语法校验 PARSE_OK）；
+      `.temp\patch_ch_batch4.py` 追加 240 条中文译文（含上述全部条目）。
+      现 base_en 5422 条在 base_ch 中 100% 有中文。
+    - 另一类问题：顾问窗口模板里静态写 `text:"${city.population} ${57.6}"`，
+      这类 ${} 只在元素 load 时解析一次，取不到值就**原样显示**（截图里出现
+      `${city.population}`、`${53.69}`、`${199.3}`）。已改为 textfn：
+      ui_advisor_education.js 三个人数行、ui_advisor_monuments.js 三处提示。
+      **规范：窗口模板里不要用静态 `${...}`，要么用 text:[group,id]，要么用 textfn。**
+    - 术语调整：`铁志` → **硬核存档模式**（#TR_CONFIG_IRONWILL 及 4 条 ironwill_* 提示）。
+    - 修正 #AD/#BC 译文颠倒：现 #AD=公元、#BC=公元前（此前真机显示"1250 公元"是错的）。
+    - 构建：resources 7/7、game 835/835、link ok、图标一致；白名单 3321 字无需新增。
+    - nro MD5 **D70B710CD2CE0FDA779B9266A72F6FF2**（26,941,523 B，六处一致），
+      zip MD5 **4BCE6A94E75E8B9E02CB5C1A5C854C37**。
+    - 待真机验证：家庭注册/家族史/纪念建筑顾问/教育顾问/空地提示是否已全中文。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
