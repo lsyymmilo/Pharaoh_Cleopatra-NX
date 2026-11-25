@@ -1071,6 +1071,22 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     base 44.133 = People/人民。已改为 **人口**（8.3 保留“人口數”供其他统计标签）。
     - nro MD5 **DBE2BA336F22143FB8B47A39268E7F41**，zip MD5 **0095FEEB32F784C12B5333596775CAF2**。
 
+58. **第五十八轮（自定任务列表显示名）已弃用 → 回退上一版**：
+    - 该轮把 `Maps/*.map` 列表显示名与副标题改成中文（C++ `set_display_names`
+      + JS 两张映射表）。用户要求弃用。
+    - 处理：`git revert 4e17a49` → 提交 **75eee4c**，源码与资源回到第 57 轮状态
+      （`localization.js` 白名单回到 3357，`ui_scenario_selection_custom.js` 映射表已移除）。
+    - **⚠️ 旧 nro 已无法逐字节取回**：第 58 轮同步六处时物理覆盖了第 57 轮 nro，备份包
+      与 GitHub 仓库均不含产物。重建版均不含第 58 轮内容（nro 内搜无「亞特蘭提斯之門」、
+      无 `set_display_names`），功能等同第 57 轮，但 MD5 与记录值不同（构建产物不可
+      完全复现）。
+    - 本次重建：**清空 `build/obj/game` 全量重编 835 文件（567s）**，后从桌面备份
+      （含第 58 轮 obj 集合）恢复 obj、重编 3 个改动 cpp，再 link/pack。
+      **经验：回退任何改动过头文件的版本时，必须全量重编 game obj，否则增量编译会
+      用旧头文件混编，产物大小/id 都不对。**
+    - 重建 nro MD5 **087962F19A51EDD6C3BD937151574036**（26,941,523 B，六处一致），
+      zip MD5 **4861D2FD40C6A711A3B026A525DA437E**。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
