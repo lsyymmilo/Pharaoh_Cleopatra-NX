@@ -1,4 +1,4 @@
-# 法老王 (Pharaoh) Switch 移植项目 — 交接文档
+﻿# 法老王 (Pharaoh) Switch 移植项目 — 交接文档
 
 > 最后更新：2026-11-23（第五十一轮：字体白名单补全 63 字——消除首帧问号/懒烘焙；
 > UI 文字首次出现即中文）
@@ -936,6 +936,12 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     - 提示：以后新增中文 UI 文本时，重跑 patch_font_symbols.py 并重编 resources
       即可保持零问号。
 
+
+    - **GitHub 同步（2026-11-25）**：三轮改动已推送，远端 main=62616a4（含
+      汉化 b603746、白名单补全 62616a4）；当前链路=加速器反代（schannel +
+      schannelCheckRevoke=false）；本机 PortableGit 仅 schannel 后端（openssl
+      不可用，此前"openssl 成功"的记录实为 MinGit 时代）；token 用后已删文件，
+      旧 token 已失效。
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
