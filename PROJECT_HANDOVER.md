@@ -1,4 +1,4 @@
-﻿# 法老王 (Pharaoh) Switch 移植项目 — 交接文档
+# 法老王 (Pharaoh) Switch 移植项目 — 交接文档
 
 > 最后更新：2026-11-23（第五十一轮：字体白名单补全 63 字——消除首帧问号/懒烘焙；
 > UI 文字首次出现即中文）
@@ -936,12 +936,52 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     - 提示：以后新增中文 UI 文本时，重跑 patch_font_symbols.py 并重编 resources
       即可保持零问号。
 
+52. **第二批汉化：设置窗口/主菜单/弹窗/日期/语言名全量中文化**（第五十二轮）：
+    - 起因：真机截图仍见大量英文——设置窗口整页 TR_CONFIG 条目、主菜单
+      Free play/Editor/Greatest Families、档案菜单 Replay mission、选项菜单
+      Monthly autosave/ Autosave slots、退出弹窗 Quit、战役列表
+      haven't played yet/Right-click to continue、日期 `Jan 3500 BC`、
+      语言列表 English/Russian/…、设置向导 Prev/Next、调试菜单 #orientation。
+    - 盘点（.temp\missing_stats.py / translate_todo.txt）：ch 表 238 键，
+      en 表 1928 键，**缺失 1690 键**，其中 TR_* 193、figure/enemy 等逐个建筑
+      与行人对话文本约 1497。本轮先做“界面外壳”全部：TR_CONFIG 155、TR_BUTTON 4、
+      TR_HOTKEY 7、TR_OTHER 27、MAIN_MENU 10、截图确认键 11、月份 12、
+      语言页标题 4、ch 表英文残留 9。
+    - **发现并修复严重隐患**：localization_ch.js 里有一段条目漏写逗号
+      （#TR_HOTKEY_EDIT_TITLE、#mansion_protected_by_police 等），node 语法检查
+      直接报错；MuJS 解析器对此较宽容才没崩。已改为“解析→规范化重写”：
+      .temp\patch_ch_batch2.py 按 `{ key, text }` 逐条重建整个数组（5 空格缩进、
+      全部补逗号、json 转义），重写后 node 校验 PARSE_OK，键数 238→469。
+    - 语言名汉化：localization.js 的 caption 改为 英语/俄语/德语/法语/意大利语/
+      韩语/波兰语/葡萄牙语/西班牙语/简体中文/匈牙利语（ch 保留 中文（繁體））。
+    - Pred/Next 来源查明：设置窗口按钮用的是 #features_prev_page/#features_next_page
+      （en 值 Prev/Next），已补中文“上一页/下一页”。
+    - Greatest Families 来源查明：ui_main_menu.js 第 3 按钮写死 text[30,5] 走
+      localization_base_ch（该表缺 group30/id5），改用具名键 #main_menu_records
+      =“名门世家”，main_menu_button_width() 同步改用 __loc('#main_menu_records')。
+    - 字体白名单：重跑 patch_font_symbols.py，新增 199 个 CJK 字符
+      （业丢两临为买云亚产从仪优会体农冻减凯别办务区协卖历发变叠号员响……蝎龛），
+      symbols 2754→2953，源码 CJK 共 896 字全部覆盖，零问号。
+    - 构建：`build_switch.py resources game link` → resources 7/7、game 835/835、
+      link ok；pack_clean_icon.py 直嵌图标（内嵌 MD5 73c04754…一致）。
+    - nro MD5 **4A4B9144A2DDFFA9DCC6256EB4EB5A3F**（26,794,067 B，六处一致），
+      zip MD5 **B5C5AE106362DD76EE02F12A810E9BF4**（387.2MB，1353 条目；安装说明里的 nro MD5 已同步为 4A4B9144…，说明文件为 UTF-8 BOM）。
+    - 额外补齐：C++ 里还有两条 en/ch 表都没有的键（截图里以裸键名出现）——
+      #TR_CONFIG_CH_WORK_CAMP_DESTINATION_AT_SPAWN（劳动营工人出发时即指定目的地）、
+      #TR_CONFIG_CH_WORK_CAMP_DISTANCE_SCALED_FARM_WORKERS（农田所需工人数随劳动营
+      距离缩放），已补；game_config.cpp 的 166 条键现已 100% 覆盖。白名单 2954 字。
+    - 待办：figure/enemy/hunter/tomb 等约 1497 条建筑与行人对话文本（下一批）；
+      Setup.mp3 "Out of memory" 仍未修。
+
 
     - **GitHub 同步（2026-11-25）**：三轮改动已推送，远端 main=62616a4（含
       汉化 b603746、白名单补全 62616a4）；当前链路=加速器反代（schannel +
       schannelCheckRevoke=false）；本机 PortableGit 仅 schannel 后端（openssl
       不可用，此前"openssl 成功"的记录实为 MinGit 时代）；token 用后已删文件，
       旧 token 已失效。
+    - **待推送（第五十二轮）**：本地 main 头提交＝"第二批汉化"（提交信息含 i18n: 第二批汉化），工作区干净；
+      推送到 github.com/lsyymmilo/Pharaoh_Cleopatra-NX 需用户提供新 PAT 并开启加速器，
+      命令模板见交接文档 GitHub 段（schannel + credential.helper 清空 + 临时 cred 文件）。
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍

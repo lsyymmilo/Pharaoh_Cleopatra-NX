@@ -50,7 +50,7 @@ window_main_menu {
 		continue_game : large_button({ pos:mbutton(0), size[256, 25], text[13, 5], font: FONT_MENU_BLACK_ON_LIGHT })
 		select_player : large_button({ pos:mbutton(1), size[256, 25], text[30, 0], font: FONT_MENU_BLACK_ON_LIGHT })
 		free_play     : large_button({ pos:mbutton(2), size[256, 25], text:"#main_menu_free_play", font: FONT_MENU_BLACK_ON_LIGHT })
-		show_records  : large_button({ pos:mbutton(3), size[256, 25], text[30, 5], font: FONT_MENU_BLACK_ON_LIGHT })
+		show_records  : large_button({ pos:mbutton(3), size[256, 25], text:"#main_menu_records", font: FONT_MENU_BLACK_ON_LIGHT })
 		show_config   : large_button({ pos:mbutton(4), size[256, 25], text[2,  0], font: FONT_MENU_BLACK_ON_LIGHT })
 		show_mods     : large_button({ pos:mbutton(5), size[256, 25], text:"#main_menu_mods", font: FONT_MENU_BLACK_ON_LIGHT })
 		show_editor   : large_button({ pos:mbutton(6), size[256, 25], text:"#main_menu_editor", font: FONT_MENU_BLACK_ON_LIGHT })
@@ -75,7 +75,7 @@ window_main_menu {
 
 function main_menu_button_width() {
 	var texts = [
-		__loc(13, 5), __loc(30, 0), __loc('#main_menu_free_play'), __loc(30, 5), __loc(2, 0),
+		__loc(13, 5), __loc(30, 0), __loc('#main_menu_free_play'), __loc('#main_menu_records'), __loc(2, 0),
 		__loc('#main_menu_mods'), __loc('#main_menu_editor'), __loc(30, 4)
 	]
 	var maxw = 0
