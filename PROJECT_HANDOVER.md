@@ -979,9 +979,8 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       schannelCheckRevoke=false）；本机 PortableGit 仅 schannel 后端（openssl
       不可用，此前"openssl 成功"的记录实为 MinGit 时代）；token 用后已删文件，
       旧 token 已失效。
-    - **待推送（第五十二轮）**：本地 main 头提交＝"第二批汉化"，工作区干净；
-      推送到 github.com/lsyymmilo/Pharaoh_Cleopatra-NX 需用户提供新 PAT 并开启加速器，
-      命令模板见上文 GitHub 段（schannel + credential.helper 清空 + 临时 cred 文件）。
+    - **待推送（第五十二轮）→ 已于本轮推送完成**：本地 main 头提交＝"第二批汉化"；
+      与第三批一起推送，远端 main=af02e92（2026-11-25）。
 
 53. **第三批汉化：en 表 1462 条全部补齐，界面英文清零**（第五十三轮）：
     - 范围：localization_en.js 相对 ch 表缺失的全部 1462 条——行人台词（渔船/猎人/
@@ -1005,7 +1004,13 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     - 至此 ch 表 1937 键（en 表 1928 键全覆盖 + 自有扩展键），语言名/月份/日期 AD-BC
       全中文。剩余英文仅可能来自：localization_base_*（原版 group/id 文本，base_ch 已
       基本齐全）、eventmsg/game_messages 事件消息（ch 版已内置）。
-    - **待推送**：第二、三批汉化均在本地 main；推送需用户提供新 PAT 并开启加速器。
+    - **GitHub 已推送（2026-11-25）**：远端正位于 **af02e92**（第二批 + 第三批汉化），
+      本地 origin/main 0 ahead / 0 behind。**新坑（本轮实证）**：仓库配置里有
+      `credential.helper=helper-selector`，它会在 push 时调起 GCM 交互登录并**无限挂起**
+      （日志 0 字节、无任何输出）；命令必须写成
+      `-c credential.helper= -c "credential.helper=store --file=<cred>"`，
+      即先空值清链再挂 store。加速器开启时 schannel + schannelCheckRevoke=false 可正常推送
+      （本轮 ls-remote 与 push 均走 127.0.0.1 反代成功）。
     - 遗留：Setup.mp3 "Out of memory" 未修；game_messages_ch 与 en 的键级差异未逐条
       核对（总量大且中文版已存在，优先级低）。
 
