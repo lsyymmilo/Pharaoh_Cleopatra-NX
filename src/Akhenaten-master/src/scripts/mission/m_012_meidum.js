@@ -42,7 +42,7 @@ mission12 { // Meidum
 	herd_points_predator [ [90, 11], [129, 109] ]
 
 	start_message : "message_mission_meidum"
-	selection_title : "Meidum"
+	selection_title : "美德姆"
 	player_rank : 4
 
 	choice_background {pack:PACK_UNLOADED, id:12}

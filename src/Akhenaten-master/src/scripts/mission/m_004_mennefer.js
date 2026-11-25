@@ -21,7 +21,7 @@ log_info("akhenaten: mission 4 started")
 mission4 {
 	map_file : "data/maps/m_004_mennefer.map"
 	start_message : "message_trade_on_the_water"
-	selection_title : "Mennefer"
+	selection_title : "孟菲斯"
 	env {
 		has_animals : true
 		marshland_grow : default_marshland_grow

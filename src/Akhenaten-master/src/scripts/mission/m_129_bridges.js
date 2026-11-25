@@ -21,8 +21,8 @@ log_info("akhenaten: mission 129 bridges started")
 // - The army size and year 25 come from the map's event; the subtitle's "20 years" is the map's own text.
 
 mission129 { // Bridges.map
-	selection_title : "Bridges"
-	selection_subtitle : "20 Years until invasion"
+	selection_title : "橋樑"
+	selection_subtitle : "距入侵還有20年"
 	selection_text : "Keep an eye on the clock, as Pharaoh will send his hordes if you don't complete his obelisk in time. The region has all the resources needed to complete the monument, and you won't be hounded by any outside distractions like requests for items.  Successful cities will have carefully planned roads and will make skillful use of the available land."
 	player_rank : 0
 

@@ -40,7 +40,7 @@ mission20 { // Djedu (Abusir) — The Temple of the Sun
 	fishing_points [ [93, 102], [84, 39] ]
 
 	start_message : "message_mission_abusir"
-	selection_title : "Djedu"
+	selection_title : "傑度"
 	player_rank : 7
 
 	choice_background {pack:PACK_UNLOADED, id:12}

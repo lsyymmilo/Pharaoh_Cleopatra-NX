@@ -33,7 +33,7 @@ mission10 { // Saqqara â€” The First Pyramid
 	]
 
 	start_message : "message_history_saqqara"
-	selection_title : "Saqqara"
+	selection_title : "薩卡拉"
 	player_rank : 1
 
 	choice_background {pack:PACK_UNLOADED, id:12}

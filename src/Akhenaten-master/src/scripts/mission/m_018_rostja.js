@@ -47,7 +47,7 @@ mission18 { // Rostja (Giza) — The Great Pyramid and Sphinx
 	herd_points_prey [ [47, 86], [19, 80], [62, 110], [107, 49] ]
 
 	start_message : "message_mission_giza"
-	selection_title : "Rostja"
+	selection_title : "羅斯加"
 	player_rank : 6
 
 	// Convergence of the Iunet/On fork; next choice Bahariya (19) / Djedu (20).

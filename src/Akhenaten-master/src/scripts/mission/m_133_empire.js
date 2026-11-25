@@ -13,7 +13,7 @@
 
 mission133 { // Empire, custom mission
 	start_message : "message_empire"
-    selection_title : "Empire"
+    selection_title : "帝國"
     selection_text : "This is an empire mission. You can build whatever you want."
 
 	env {

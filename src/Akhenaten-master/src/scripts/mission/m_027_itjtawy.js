@@ -37,7 +37,7 @@ log_info("akhenaten: mission 27 itjtawy started")
 mission27 { // Itjtawy - A New Capital is Founded
 	map_file : "data/maps/m_027_itjtawy.map"
 	start_message : "message_mission_itjtawy"
-	selection_title : "Itjtawy"
+	selection_title : "伊塔威"
 	player_rank : 10
 
 	// Convergence of Kebet (25) / Menat Khufu (26); next choice Iken (28) / Sawu (29).

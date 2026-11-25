@@ -35,7 +35,7 @@ mission43 {
 	herd_points_predator [ [43, 19], [14, 60] ]
 
 	start_message : "message_mission_abu_simbel"
-	selection_title : "Abu Simbel"
+	selection_title : "阿布西貝"
 	player_rank : 5
 	carry_troops : ["infantry"]
 

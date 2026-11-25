@@ -29,7 +29,7 @@ mission17 { // On (Heliopolis) — Ivory from the East
 	herd_points_prey [ [72, 116], [96, 107] ]
 
 	start_message : "message_mission_heliopolis"
-	selection_title : "On"
+	selection_title : "昂"
 	player_rank : 6
 
 	// On (17) and Iunet (16) are a choice pair; both converge on Rostja (18).

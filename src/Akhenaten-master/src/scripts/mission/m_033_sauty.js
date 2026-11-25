@@ -35,7 +35,7 @@ mission33 { // Sauty (Lykopolis) — Egypt Reclaimed
 	herd_points_predator [ [71, 95], [62, 60], [73, 57], [67, 112] ]
 
 	start_message : "message_mission_lykopolis"
-	selection_title : "Sauty"
+	selection_title : "索提"
 	player_rank : 10
 
 	choice_background {pack:PACK_UNLOADED, id:12}

@@ -30,7 +30,7 @@ mission38 { // Thutmose in the Valley — The First Tomb
 	herd_points_predator [ [215, 111], [60, 83], [86, 66] ]
 
 	start_message : "message_mission_thutmose_valley"
-	selection_title : "Thutmose in the Valley"
+	selection_title : "圖特摩斯谷地"
 	player_rank : 5
 
 	next_mission : 39

@@ -13,7 +13,7 @@
 
 mission135 { // Enkomi, custom mission
 	start_message : "message_enkomi"
-    selection_title : "Enkomi"
+    selection_title : "印科米"
     selection_text : "This is an enkomi mission. You can build whatever you want."
 
 	env {

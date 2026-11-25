@@ -40,7 +40,7 @@ mission29 { // Sawu (Mersa Gawasis) — Shores of the Red Sea; briefing key = me
 	fishing_points [ [82, 15], [151, 80], [25, 97] ]
 
 	start_message : "message_mission_mersa_gawasis"
-	selection_title : "Sawu"
+	selection_title : "塞烏"
 	player_rank : 10
 
 	// Choice pair with Iken; next is Heh (30) / Bubastis (31).

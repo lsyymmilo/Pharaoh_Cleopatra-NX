@@ -34,7 +34,7 @@ mission8 { // Selima — The Road to Africa
 	herd_points_prey [ [70, 49], [53, 87] ]
 
 	start_message : "message_the_finer_things_tutorial"
-	selection_title : "Selima"
+	selection_title : "塞利馬"
 	player_rank : 3
 	next_mission : 10
 	initial_funds [7500, 5000, 3750, 2500, 2000]

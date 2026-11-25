@@ -18,7 +18,7 @@ log_info("akhenaten: mission 3 started")
 mission3 {
 	map_file : "data/maps/m_003_nekhen.map"
 	start_message : "message_developing_culture"
-	selection_title : "Nekhen"
+	selection_title : "涅克翰"
 	env {
 		has_animals : true
 		marshland_grow : default_marshland_grow

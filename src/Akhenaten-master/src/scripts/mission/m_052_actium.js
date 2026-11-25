@@ -33,7 +33,7 @@ mission52 { // Actium - Antony and Cleopatra
 	herd_points_prey [ [78, 98] ]
 
 	start_message : "message_mission_actium"
-	selection_title : "Actium"
+	selection_title : "阿克提姆"
 	player_rank : 10
 	carry_troops : ["archer", "infantry"]
 

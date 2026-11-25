@@ -22,7 +22,7 @@ mission9 { // Abu — The Nubian Border
 	herd_points_predator [ [96, 104], [50, 90], [38, 50] ]
 
 	start_message : "message_history_abu"
-	selection_title : "Abu"
+	selection_title : "阿布"
 	env {
 		has_animals : true
 		marshland_grow : default_marshland_grow

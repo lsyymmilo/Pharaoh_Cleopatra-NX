@@ -29,8 +29,8 @@ log_info("akhenaten: mission 128 alexandria started")
 //   3500 + year*12 + month Bedouin reminders.
 
 mission128 { // Alexandria.map — An Alexandrian Affair
-	selection_title : "Alexandria"
-	selection_subtitle : "An Alexandrian Affair"
+	selection_title : "亞歷山卓"
+	selection_subtitle : "亞歷山卓往事"
 	selection_text : "Brief description of this map, for players. History, aims and tips etc."
 	player_rank : 10
 

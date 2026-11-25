@@ -35,7 +35,7 @@ log_info("akhenaten: mission 37 hetepsensusret started")
 mission37 { // Hetepsensusret (Kahun) — The Glory of Pharaoh
 	map_file : "data/maps/m_037_hetepsensusret.map"
 	start_message : "message_mission_kahun"
-	selection_title : "Hetepsensusret"
+	selection_title : "赫特普塞努塞雷特"
 	player_rank : 10
 
 	next_mission : -1

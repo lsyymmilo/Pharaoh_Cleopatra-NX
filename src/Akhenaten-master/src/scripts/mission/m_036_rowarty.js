@@ -34,7 +34,7 @@ log_info("akhenaten: mission 36 rowarty started")
 mission36 { // Rowarty (Avaris) — The Sea People
 	map_file : "data/maps/m_036_rowarty.map"
 	start_message : "message_mission_avarist"
-	selection_title : "Rowarty"
+	selection_title : "羅瓦提"
 	player_rank : 10
 
 	next_mission : -1

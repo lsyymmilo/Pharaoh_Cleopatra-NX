@@ -13,7 +13,7 @@
 
 mission134 { // Default, custom mission
 	start_message : "message_default"
-    selection_title : "Default"
+    selection_title : "預設地圖"
     selection_text : "This is a default mission. You can build whatever you want."
 
 	env {

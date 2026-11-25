@@ -28,7 +28,7 @@ mission1 {
 	]
 
 	start_message : "message_gold_and_crime"
-	selection_title : "Thinis"
+	selection_title : "希尼斯"
 	env {
 		has_animals : true
 	    gods_least_mood : 50

@@ -38,7 +38,7 @@ mission13 { // Buhen — Expansion to Nubia
 	herd_points_prey [ [76, 29], [93, 53] ]
 
 	start_message : "message_mission_buhen"
-	selection_title : "Buhen"
+	selection_title : "布漢"
 	player_rank : 5
 
 	next_mission : 15

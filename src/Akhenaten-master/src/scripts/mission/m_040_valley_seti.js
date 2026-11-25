@@ -34,7 +34,7 @@ mission40 { // Seti in the Valley — Tomb for a Pharaoh
 	herd_points_predator [ [216, 111], [87, 67], [60, 83], [88, 164] ]
 
 	start_message : "message_mission_seti_valley"
-	selection_title : "Seti in the Valley"
+	selection_title : "塞提谷地"
 	player_rank : 6
 
 	next_mission : -1

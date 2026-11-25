@@ -40,7 +40,7 @@ mission16 { // Iunet (Dendera) — The Defense of Egypt
 	fishing_points [ [73, 41], [110, 53], [106, 80], [48, 62] ]
 
 	start_message : "message_mission_dendera"
-	selection_title : "Iunet"
+	selection_title : "約涅特"
 	player_rank : 6
 
 	// Iunet (16) and On (17) are a choice pair; both converge on Rostja (18).

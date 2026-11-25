@@ -30,7 +30,7 @@ log_info("akhenaten: mission 49 alexandria_2 started")
 mission49 { // Ptolemy's Alexandria - A Beacon of Light
 	map_file : "data/maps/m_049_alexandria_2.map"
 	start_message : "message_mission_ptolemy_alexandria"
-	selection_title : "Ptolemy's Alexandria"
+	selection_title : "托勒密時期的亞歷山卓"
 	player_rank : 10
 	carry_troops : ["archer", "infantry"]
 	carry_monuments : true

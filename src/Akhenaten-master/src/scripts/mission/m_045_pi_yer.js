@@ -43,7 +43,7 @@ mission45 { // Pi-Yer — The Sea People Land
 	herd_points_predator [ [21, 46] ]
 
 	start_message : "message_mission_pi_yer"
-	selection_title : "Pi-Yer"
+	selection_title : "皮亞"
 	player_rank : 4
 
 	next_mission : 46

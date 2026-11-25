@@ -32,7 +32,7 @@ mission42 {
 	herd_points_predator [ [88, 92] ]
 
 	start_message : "message_mission_qadesh"
-	selection_title : "Qadesh"
+	selection_title : "哥代錫"
 	player_rank : 10
 	// CO2: best infantry + chariot companies from Sumur (41) if campaign advance.
 	carry_troops : ["infantry", "chariot"]

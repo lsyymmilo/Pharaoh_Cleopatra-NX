@@ -42,7 +42,7 @@ mission30 { // Heh (Semna) — The Gauntlet
 	herd_points_predator [ [12, 72], [100, 33], [100, 40] ]
 
 	start_message : "message_mission_semna"
-	selection_title : "Heh"
+	selection_title : "黑"
 	player_rank : 10
 
 	// Sibling Bubastis (31); both host choice -> Khmun/Sauty (hidden until scripted).

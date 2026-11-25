@@ -50,7 +50,7 @@ mission23 { // Thinis — Civil War FIP; != mission1 Dawn
 	herd_points_prey [ [162, 169], [198, 96] ]
 
 	start_message : "message_mission_thinis"
-	selection_title : "Thinis"
+	selection_title : "希尼斯"
 	player_rank : 9
 	reset_personal_savings : true
 

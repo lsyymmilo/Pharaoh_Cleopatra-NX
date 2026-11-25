@@ -48,7 +48,7 @@ mission6 { // Behdet — Pharaoh's Navy
 	fishing_points [ [73, 38], [89, 61] ]
 
 	start_message : "message_soldiers_and_forts"
-	selection_title : "Behdet"
+	selection_title : "班戴特"
 	player_rank : 2
 
 	choice_background {pack:PACK_UNLOADED, id:12}

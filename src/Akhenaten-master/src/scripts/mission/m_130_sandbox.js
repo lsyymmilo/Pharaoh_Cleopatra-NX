@@ -13,7 +13,7 @@
 
 mission130 { // Sandbox, custom mission
 	start_message : "message_sandbox"
-    selection_title : "Sandbox"
+    selection_title : "沙盒"
     selection_text : "This is a sandbox mission. You can build whatever you want."
 
 	env {

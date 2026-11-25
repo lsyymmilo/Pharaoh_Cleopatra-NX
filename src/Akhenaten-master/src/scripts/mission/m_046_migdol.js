@@ -27,7 +27,7 @@ log_info("akhenaten: mission 46 migdol started")
 mission46 { // Migdol - Repel the Assyrians
 	map_file : "data/maps/m_046_migdol.map"
 	start_message : "message_mission_migdol"
-	selection_title : "Migdol"
+	selection_title : "米格多"
 	player_rank : 5
 
 	next_mission : 47

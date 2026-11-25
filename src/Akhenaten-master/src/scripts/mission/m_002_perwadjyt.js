@@ -23,7 +23,7 @@ mission2 {
 	herd_points_predator [ [71, 36], [17, 65] ]
 
 	start_message : "message_farming_along_the_nile"
-	selection_title : "Perwadjyt"
+	selection_title : "普瓦吉特"
 	env {
 		has_animals : true
 	    gods_least_mood : 50

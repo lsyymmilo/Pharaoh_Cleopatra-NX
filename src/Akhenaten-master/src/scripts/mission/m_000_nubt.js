@@ -27,7 +27,7 @@ mission0 { // Nubt
 	]
 
 	start_message : "message_housing_and_roads"
-	selection_title : "Nubt"
+	selection_title : "努布"
 	env {
 		has_animals : true
 	    gods_least_mood : 50

@@ -37,7 +37,7 @@ mission24 { // Waset (Thebes) — Civil War
 	fishing_points [ [96, 118], [58, 50] ]
 
 	start_message : "message_mission_thebes"
-	selection_title : "Waset"
+	selection_title : "瓦士特"
 	player_rank : 8
 
 	choice_background {pack:PACK_UNLOADED, id:12}

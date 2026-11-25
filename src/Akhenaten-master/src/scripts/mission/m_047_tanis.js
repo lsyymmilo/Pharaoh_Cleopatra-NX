@@ -34,7 +34,7 @@ log_info("akhenaten: mission 47 tanis started")
 mission47 { // Tanis - Rebirth of a Navy
 	map_file : "data/maps/m_047_tanis.map"
 	start_message : "message_mission_tanis"
-	selection_title : "Tanis"
+	selection_title : "坦尼斯"
 	player_rank : 6
 
 	next_mission : -1

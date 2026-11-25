@@ -30,7 +30,7 @@ log_info("akhenaten: mission 31 bubastis started")
 mission31 { // Bubastis — The City of Bast
 	map_file : "data/maps/m_031_bubastis.map"
 	start_message : "message_mission_bubastis"
-	selection_title : "Bubastis"
+	selection_title : "布巴堤斯"
 	player_rank : 10
 
 	choice_background {pack:PACK_UNLOADED, id:12}

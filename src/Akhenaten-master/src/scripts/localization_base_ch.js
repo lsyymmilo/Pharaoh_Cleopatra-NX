@@ -194,7 +194,7 @@ localization_base_ch = [
     { group:8, id:0, text:"戴班幣" },
     { group:8, id:1, text:"戴班幣" },
     { group:8, id:2, text:"人" },
-    { group:8, id:3, text:"人" },
+    { group:8, id:3, text:"人口數" },
     { group:8, id:4, text:"個月" },
     { group:8, id:5, text:"個月" },
     { group:8, id:6, text:"單位的穀物存量" },

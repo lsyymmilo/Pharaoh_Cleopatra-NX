@@ -46,7 +46,7 @@ mission5 { // Timna
 	herd_points_prey [ [82, 96] ]
 
 	start_message : "message_history_military"
-	selection_title : "Timna"
+	selection_title : "提姆納"
 	env {
 		has_animals : true
 		marshland_grow : default_marshland_grow

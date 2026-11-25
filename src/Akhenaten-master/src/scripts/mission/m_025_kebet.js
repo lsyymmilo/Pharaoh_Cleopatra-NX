@@ -39,7 +39,7 @@ mission25 { // Kebet (Coptos) — Reunification; briefing key = coptos
 	fishing_points [ [54, 47], [75, 66], [87, 90], [129, 111], [100, 97] ]
 
 	start_message : "message_mission_coptos"
-	selection_title : "Kebet"
+	selection_title : "凱貝特"
 	player_rank : 9
 	reset_personal_savings : true
 

@@ -45,7 +45,7 @@ mission28 { // Iken (Mirgissa) — Into Nubia; briefing key = mirgissa
 	herd_points_prey [ [125, 20], [205, 101] ]
 
 	start_message : "message_mission_mirgissa"
-	selection_title : "Iken"
+	selection_title : "伊肯"
 	player_rank : 10
 
 	// Choice pair with Sawu; next is Heh (30) / Bubastis (31).

@@ -26,7 +26,7 @@ mission39 { // Tut in the Valley — Death of Tutankhamun
 	herd_points_predator [ [71, 58], [59, 83], [104, 85] ]
 
 	start_message : "message_mission_tutankhamun_valley"
-	selection_title : "Tut in the Valley"
+	selection_title : "圖坦卡門谷地"
 	player_rank : 6
 
 	next_mission : 40

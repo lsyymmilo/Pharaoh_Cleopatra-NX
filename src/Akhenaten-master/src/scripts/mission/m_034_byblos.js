@@ -50,7 +50,7 @@ mission34 { // Byblos — Expansion and Conquest
 	fishing_points [ [65, 143], [19, 96], [32, 100], [35, 111], [49, 116], [50, 128], [68, 138], [59, 136] ]
 
 	start_message : "message_mission_byblos"
-	selection_title : "Byblos"
+	selection_title : "拜波羅斯"
 	player_rank : 10
 	reset_personal_savings : true
 

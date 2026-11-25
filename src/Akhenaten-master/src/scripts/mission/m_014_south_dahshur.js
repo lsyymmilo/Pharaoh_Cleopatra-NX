@@ -27,7 +27,7 @@ log_info("akhenaten: mission 14 south dahshur started")
 mission14 { // South Dahshur — Snofru's Bent Pyramid
 	map_file : "data/maps/m_014_south_dahshur.map"
 	start_message : "message_mission_south_dahshur"
-	selection_title : "South Dahshur"
+	selection_title : "南達舒爾"
 	player_rank : 5
 
 	// Choice-pair partner of Buhen (13); both converge on North Dahshur (15).

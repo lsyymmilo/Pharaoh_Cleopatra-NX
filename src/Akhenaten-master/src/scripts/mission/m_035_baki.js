@@ -30,7 +30,7 @@ log_info("akhenaten: mission 35 baki started")
 mission35 { // Baki (Kuban) — The Glory of Egypt
 	map_file : "data/maps/m_035_baki.map"
 	start_message : "message_mission_kuban"
-	selection_title : "Baki"
+	selection_title : "貝吉"
 	player_rank : 10
 
 	next_mission : 37

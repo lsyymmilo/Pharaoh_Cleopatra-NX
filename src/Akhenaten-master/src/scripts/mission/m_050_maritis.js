@@ -33,7 +33,7 @@ log_info("akhenaten: mission 50 maritis started")
 mission50 { // Maritis - Caesar and Cleopatra
 	map_file : "data/maps/m_050_maritis.map"
 	start_message : "message_mission_maritis"
-	selection_title : "Maritis"
+	selection_title : "馬拉提斯"
 	player_rank : 1
 
 	next_mission : 51

@@ -40,7 +40,7 @@ mission32 { // Khmun (Hermopolis) — Egypt Reclaimed
 	herd_points_predator [ [50, 32], [79, 35], [30, 92], [38, 39] ]
 
 	start_message : "message_mission_hermopolis"
-	selection_title : "Khmun"
+	selection_title : "卡穆"
 	player_rank : 10
 	reset_personal_savings : true
 

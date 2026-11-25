@@ -44,7 +44,7 @@ mission21 { // Dunqul Oasis — The Kushite Threat
 	herd_points_prey [ [101, 106], [65, 80], [142, 98] ]
 
 	start_message : "message_mission_dunqul"
-	selection_title : "Dunqul"
+	selection_title : "棟古拉"
 	player_rank : 8
 
 	choice_background {pack:PACK_UNLOADED, id:12}

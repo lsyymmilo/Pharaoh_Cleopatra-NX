@@ -62,7 +62,7 @@ mission7 { // Abydos / Abedju — The Challenge of the Sea
 	fishing_points [ [95, 66], [76, 65], [110, 71] ]
 
 	start_message : "message_soldiers_and_forts"
-	selection_title : "Abydos"
+	selection_title : "阿比多斯"
 	env {
 		has_animals : true
 		marshland_grow : default_marshland_grow

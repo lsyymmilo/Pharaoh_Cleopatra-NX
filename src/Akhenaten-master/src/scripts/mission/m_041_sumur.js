@@ -44,7 +44,7 @@ mission41 { // Sumur — Lands of the Levant
 	herd_points_predator [ [113, 63], [73, 24] ]
 
 	start_message : "message_mission_sumur"
-	selection_title : "Sumur"
+	selection_title : "蘇莫"
 	player_rank : 6
 
 	next_mission : 42

@@ -36,7 +36,7 @@ log_info("akhenaten: mission 51 alexandria_3 started")
 mission51 { // Cleopatra's Alexandria - The Legacy of a Queen
 	map_file : "data/maps/m_051_alexandria_3.map"
 	start_message : "message_mission_cleopatra_alexandria"
-	selection_title : "Cleopatra's Alexandria"
+	selection_title : "埃及豔后的亞歷山卓"
 	player_rank : 10
 	carry_monuments : true
 

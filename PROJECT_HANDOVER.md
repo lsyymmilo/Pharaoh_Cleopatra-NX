@@ -1051,6 +1051,21 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     - nro MD5 **F6EFEDD7C3BD64F722A206DE3124C5F5**（26,941,523 B，六处一致），
       zip MD5 **EFFBA66B84AB3C052C67C6B41A37845E**。
 
+56. **自定任务列表 61 条标题汉化 + “人民”→“人口數”**（第五十六轮）：
+    - 真机截图：自定任务（Custom Game）列表里 Alexandria / Bridges / Cataract /
+      Sandbox … 全是英文；任务详情页胜利条件里 “人民 20000” 应为人口数。
+    - 根因：自定任务名不在任何本地化表里，而是每个 `scripts\mission\m_XXX_*.js`
+      里的 `selection_title` / `selection_subtitle` 字面量。
+    - 处理：`.temp\localize_mission_titles.py` 先用 base 表反查官方译名
+      （en 文本 → group/id → base_ch），一次替换 41 条（努布/希尼斯/普瓦吉特/薩卡拉/
+      亞歷山卓…）；剩 21 条 + 2 条副标题由 `patch_mission_titles2.py` 手工译
+      （孟菲斯/塞利馬/南達舒爾/圖特摩斯谷地/托勒密時期的亞歷山卓/沙盒/瀑布/
+      戰車閃擊/預設地圖…）。61 个 mission js 全部中文。
+    - base 8.3 `People` 由“人民”改为 **“人口數”**（任务胜利条件等处的统计标签）。
+    - 字表：mission 目录只多出 1 个字符 `†`，已补入（白名单 3357）。
+    - nro MD5 **3A0526D51AA4009DE20E35FAF12D0B21**（26,941,523 B，六处一致），
+      zip MD5 **E4A0C13EB57AF65C4E726DD2A661AE0D**。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍

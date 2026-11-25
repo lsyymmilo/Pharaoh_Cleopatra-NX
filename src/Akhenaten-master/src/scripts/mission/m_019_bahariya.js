@@ -43,7 +43,7 @@ mission19 { // Bahariya Oasis — The Western Desert
 	herd_points_prey [ [69, 70], [93, 97] ]
 
 	start_message : "message_mission_bahariya_oasis"
-	selection_title : "Bahariya"
+	selection_title : "巴哈里耶"
 	player_rank : 6
 
 	choice_background {pack:PACK_UNLOADED, id:12}

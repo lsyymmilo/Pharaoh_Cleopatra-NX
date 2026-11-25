@@ -41,7 +41,7 @@ mission11 { // Serabit Khadim — The Bedouin of the East
 	]
 
 	start_message : "message_mission_serabit_khadim"
-	selection_title : "Serabit Khadim"
+	selection_title : "塞拉比特卡迪姆"
 	player_rank : 5
 
 	choice_background {pack:PACK_UNLOADED, id:12}

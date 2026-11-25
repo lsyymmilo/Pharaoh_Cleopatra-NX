@@ -45,7 +45,7 @@ mission22 { // Dakhla Oasis — The Caravan Trail
 	herd_points_prey [ [86, 45], [64, 87] ]
 
 	start_message : "message_mission_dakhla"
-	selection_title : "Dakhla"
+	selection_title : "達赫拉"
 	player_rank : 8
 
 	choice_background {pack:PACK_UNLOADED, id:12}

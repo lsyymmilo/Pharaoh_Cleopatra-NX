@@ -25,7 +25,7 @@ log_info("akhenaten: mission 26 menat khufu started")
 mission26 { // Menat Khufu (Beni Hasan) — Reunification
 	map_file : "data/maps/m_026_menat_khufu.map"
 	start_message : "message_mission_beni_hasan"
-	selection_title : "Menat Khufu"
+	selection_title : "邁涅特庫夫"
 	player_rank : 9
 
 	// Kebet (25) and Menat (26) are a choice pair; both converge on Itjtawy (27).
