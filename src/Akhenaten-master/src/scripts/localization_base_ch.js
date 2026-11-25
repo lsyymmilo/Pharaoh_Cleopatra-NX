@@ -1666,7 +1666,7 @@ localization_base_ch = [
     { group:44, id:130, text:"繁榮" },
     { group:44, id:131, text:"紀念性建築物" },
     { group:44, id:132, text:"王國" },
-    { group:44, id:133, text:"人民" },
+    { group:44, id:133, text:"人口" },
     { group:44, id:134, text:"最長的時間 " },
     { group:44, id:135, text:"存活時間 " },
     { group:44, id:136, text:"前往城市" },

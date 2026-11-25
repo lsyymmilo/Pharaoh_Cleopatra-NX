@@ -1066,6 +1066,11 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     - nro MD5 **3A0526D51AA4009DE20E35FAF12D0B21**（26,941,523 B，六处一致），
       zip MD5 **E4A0C13EB57AF65C4E726DD2A661AE0D**。
 
+57. **胜利条件“人民”→“人口”**（第五十七轮，纠错）：上一轮改的 base 8.3 不是胜利条件
+    用的那条——`ui_scenario_selection.js:180` 的 `scenario_info_goal_line(... , 44, 133)` 才是，
+    base 44.133 = People/人民。已改为 **人口**（8.3 保留“人口數”供其他统计标签）。
+    - nro MD5 **DBE2BA336F22143FB8B47A39268E7F41**，zip MD5 **0095FEEB32F784C12B5333596775CAF2**。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
