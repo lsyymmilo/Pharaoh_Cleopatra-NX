@@ -1038,6 +1038,19 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       zip MD5 **4BCE6A94E75E8B9E02CB5C1A5C854C37**。
     - 待真机验证：家庭注册/家族史/纪念建筑顾问/教育顾问/空地提示是否已全中文。
 
+55. **字库白名单补齐“韩/匈”等 35 字（第五十五轮）**：
+    - 真机截图：语言列表里「韩语」显示 `???语`、「匈牙利语」显示 `???牙利语`，
+      日志 `fnt: regen #3 symbols=3388`（+2）证实运行时才补字 → 问号瞬现。
+    - 根因：旧补字脚本 `patch_font_symbols.py` 只扫 localization_ch.js 与
+      ui_mods_window.js，没扫 **localization.js 的语言名 caption**（我上轮把
+      caption 改成中文，韩/匈两个字没进白名单）。
+    - 修复：新增 `.temp\patch_font_symbols_all.py`，扫描 scripts 下**全部 249 个 .js**
+      的 CJK/全角标点字符与白名单比对，一次补 35 字
+      （丽剂势匈咎导执斗榜溃滞祸稼筹签粹纯绑联胜脱艳训诺贫贮赚针镜韩鬣等），
+      白名单 3321 → 3356。**以后改任何 js 里的中文都先跑这个脚本再编。**
+    - nro MD5 **F6EFEDD7C3BD64F722A206DE3124C5F5**（26,941,523 B，六处一致），
+      zip MD5 **EFFBA66B84AB3C052C67C6B41A37845E**。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
