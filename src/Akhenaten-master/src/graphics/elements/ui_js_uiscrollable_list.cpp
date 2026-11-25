@@ -97,27 +97,6 @@ static void ui_proxy_set_use_file_finder(js_State* J) {
     J->pushundefined();
 }
 
-static void ui_proxy_set_display_names(js_State* J) {
-    ui::element* elem = ui::GET_ELEM(J);
-    auto* list = elem ? elem->dcast_scrollable_list() : nullptr;
-    if (list && J->isobject(1)) {
-        std::vector<std::pair<xstring, xstring>> names;
-        js_pushiterator(J, 1, 1);
-        js_StringNode key;
-        while ((key = js_nextiterator(J, -1))) {
-            const char* k = js_strnode_cstr(key);
-            const char* v = J->isstring(-1) ? js_strnode_cstr(js_tostring(J, -1)) : "";
-            if (k && *k) {
-                names.push_back({ xstring(k), xstring(v) });
-            }
-            js_pop(J, 1);
-        }
-        js_pop(J, 1);
-        list->set_display_names(std::move(names));
-    }
-    J->pushundefined();
-}
-
 static void ui_proxy_change_file_path(js_State* J) {
     ui::element* elem = ui::GET_ELEM(J);
     if (elem) {
@@ -213,7 +192,6 @@ void js_register_ui_element_scrollable_list(js_State *J) {
     def_function(J, ui_proxy_select_entry, "select_index", 1);
     def_function(J, ui_proxy_refresh_file_finder, "refresh_file_finder", 0);
     def_function(J, ui_proxy_set_use_file_finder, "set_use_file_finder", 1);
-    def_function(J, ui_proxy_set_display_names, "set_display_names", 1);
     def_function(J, ui_proxy_change_file_path, "change_file_path", 2);
     def_function(J, ui_proxy_append_files_with_extension, "append_files_with_extension", 2);
     def_function(J, ui_proxy_prioritize_files_prefix, "prioritize_files_prefix", 1);

@@ -1071,31 +1071,6 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
     base 44.133 = People/人民。已改为 **人口**（8.3 保留“人口數”供其他统计标签）。
     - nro MD5 **DBE2BA336F22143FB8B47A39268E7F41**，zip MD5 **0095FEEB32F784C12B5333596775CAF2**。
 
-58. **自定任务（Custom Maps）列表与副标题汉化**（第五十八轮）：
-    - 真机截图：自定任务窗口左侧 33 项地图名全英文（Alexandria / Bridges /
-      Cataract / Chariot Blitz / …），右侧标题 `Alexandria`、副标题
-      `An Alexandrian Affair` 也是英文。第 56 轮改的 `mission/*.js` 的
-      `selection_title` 只作用于 Free play / campaign，对本窗口无效。
-    - 根因：`window_scenario_selection_custom` 用 file finder 扫 `Maps/*.map`，
-      列表文本与标题直接取**文件名**（`get_entry_draw_text` /
-      `custom_map_selection_title`）；副标题取 map 文件内嵌的**定长 64 字节
-      subtitle**（英文，UTF-8 槽位，如 `An Alexandrian Affair`）。
-    - 方案：不动玩家 SD 卡上的 33 个 map 资源（改文件名会产生英文/中文双份
-      残留并破坏 `custom_missions` 加载），改为**显示别名**：
-      1. C++ `scrollable_list` 新增 `display_names`（无扩展文件名 → 中文显示名），
-         `get_entry_draw_text` 查表；加载/选中仍返回真实文件名。
-      2. `ui.h/ui.cpp` 的 `escrollable_list::set_display_names` 转调；
-         `ui_js_uiscrollable_list.cpp` 新增 JS API `list.set_display_names({})`。
-      3. `ui_scenario_selection_custom.js` 内建 `custom_map_display_names`
-         与 `custom_map_display_subtitles` 两张表（各 33 条），init 注入，
-         标题/副标题查表，找不到时回退原名/原副标题。
-    - 译名示例：亞歷山卓／橋樑／瀑布／戰車閃擊／克爾瑪要塞／亞特蘭提斯之門／
-      赫嫩涅蘇／北非自由貿易／沙盒：金字塔／階梯之城／托斯卡／昔蘭尼 …
-    - 字表：3357 → 3359（新增「侧」「壽」）。
-    - 若以后新增 `Maps/*.map`，需在两张表里补一条，否则该图仍显示英文名。
-    - nro MD5 **3AE8201A3A280D49693986AFDB77801D**（26,941,523 B，六处一致），
-      zip MD5 **1C2A680DE476CA8376B0252FBA588400**。
-
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍

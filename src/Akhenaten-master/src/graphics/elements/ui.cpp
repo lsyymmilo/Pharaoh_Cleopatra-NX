@@ -2090,13 +2090,6 @@ void ui::escrollable_list::set_use_file_finder(bool use) {
     }
 }
 
-void ui::escrollable_list::set_display_names(std::vector<std::pair<xstring, xstring>> names) {
-    ensure_panel();
-    if (panel) {
-        panel->set_display_names(std::move(names));
-    }
-}
-
 void ui::escrollable_list::change_file_path(const xstring& dir, const xstring& ext) {
     params.files_dir = dir;
     params.file_ext = ext;

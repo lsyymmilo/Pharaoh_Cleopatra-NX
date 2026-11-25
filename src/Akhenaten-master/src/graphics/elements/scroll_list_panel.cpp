@@ -86,13 +86,7 @@ bstring256 scrollable_list::get_entry_draw_text(int index) {
     if (ui_params.use_file_finder) {
         vfs::path no_ext(file_finder->files[index]);
         no_ext.remove_extension();
-        const xstring real_name = vfs::decode_fs_name(no_ext.c_str());
-        for (const auto &it : display_names) {
-            if (string_compare_case_insensitive(real_name.c_str(), it.first.c_str()) == 0) {
-                return it.second.c_str();
-            }
-        }
-        return real_name.c_str();
+        return vfs::decode_fs_name(no_ext.c_str()).c_str();
     }
     return manual_entry_list[index].text.c_str();
 }

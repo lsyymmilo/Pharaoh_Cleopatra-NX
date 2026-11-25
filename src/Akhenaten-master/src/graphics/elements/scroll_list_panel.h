@@ -5,7 +5,6 @@
 #include "scrollbar.h"
 
 #include <vector>
-#include <utility>
 
 #define MAX_BUTTONS_IN_SCROLLABLE_LIST 50
 // must cover MAX_MESSAGES (1000): the messages window adds one entry per city message
@@ -79,11 +78,6 @@ public:
     }
 
     void set_file_finder_usage(bool use);
-    // file-finder display alias: file base name (no extension) -> localized caption.
-    // Only affects drawing; loading keeps using the real file name.
-    void set_display_names(std::vector<std::pair<xstring, xstring>> names) {
-        display_names = std::move(names);
-    }
     void clear_entry_list();
     void add_entry(xstring entry_text, uintptr_t user_data = 0);
     void change_file_path(xstring dir, xstring ext);
@@ -133,8 +127,6 @@ private:
     svector<entry_data, MAX_MANUAL_ENTRIES> manual_entry_list;
 
     custom_text_render_func custom_text_render;
-
-    std::vector<std::pair<xstring, xstring>> display_names;
 
     bool WAS_DRAWN = false; // for frame-ordered caching logic purposes
     void rebuild_buttons_geometry();

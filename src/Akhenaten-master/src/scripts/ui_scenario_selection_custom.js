@@ -1,83 +1,8 @@
 log_info("akhenaten: scenario selection — custom maps")
 
-// 自定任务（Custom Maps）列表显示名。map 文件本身保持英文名不变（加载仍用真名），
-// 仅列表绘制与右侧标题/副标题使用中文，避免改动玩家 SD 卡上的地图资源。
-var custom_map_display_names = {
-    "Alexandria": "亞歷山卓",
-    "Bridges": "橋樑",
-    "Cataract": "瀑布",
-    "Chariot Blitz": "戰車閃擊",
-    "Default": "預設場景",
-    "Empire": "帝國",
-    "Enkomi": "恩科米",
-    "Fortress Kerma": "克爾瑪要塞",
-    "Gateway to Atlantis": "亞特蘭提斯之門",
-    "Henen-nesw": "赫嫩涅蘇",
-    "Holy Grail": "聖杯",
-    "Hostile Nations": "敵對諸國",
-    "King": "王者",
-    "Kyrene": "昔蘭尼",
-    "Lost Tomb": "失落之墓",
-    "NAFTA": "北非自由貿易",
-    "Pharaohs Memphis": "法老孟菲斯",
-    "Pyramid Scheme": "金字塔計畫",
-    "Sandbox": "沙盒",
-    "Sandbox Bent and Sphinx": "沙盒：彎曲金字塔",
-    "Sandbox Maus and Mastabas": "沙盒：陵墓與馬斯塔巴",
-    "Sandbox Mudbrick Pyramids": "沙盒：泥磚金字塔",
-    "Sandbox Obelisks": "沙盒：方尖碑",
-    "Sandbox Pyramids": "沙盒：金字塔",
-    "Sandbox Sun Temple": "沙盒：太陽神廟",
-    "Shaat": "沙阿特",
-    "Small Oasis": "小綠洲",
-    "Steps": "階梯之城",
-    "The Good Life": "美好生活",
-    "Toshka": "托斯卡",
-    "Two Cities": "兩座城市",
-    "Unreliant": "自給自足",
-    "Warfare": "戰爭"
-}
-
-var custom_map_display_subtitles = {
-    "Alexandria": "亞歷山卓風雲",
-    "Bridges": "入侵前的二十年",
-    "Cataract": "阿布，還是不阿布",
-    "Chariot Blitz": "帝國擴張",
-    "Default": "預設場景",
-    "Empire": "統治你的帝國",
-    "Enkomi": "堅持下去",
-    "Fortress Kerma": "庫什欲奪回克爾瑪",
-    "Gateway to Atlantis": "我們並不孤單……",
-    "Henen-nesw": "想當法老嗎",
-    "Holy Grail": "聖杯傳說",
-    "Hostile Nations": "艱難時世",
-    "King": "為王真好",
-    "Kyrene": "利比亞之河",
-    "Lost Tomb": "法老失落之墓",
-    "NAFTA": "北非自由貿易",
-    "Pharaohs Memphis": "建立你的首都",
-    "Pyramid Scheme": "二加二等於五",
-    "Sandbox": "純粹的城市建設",
-    "Sandbox Bent and Sphinx": "純粹的城市建設",
-    "Sandbox Maus and Mastabas": "純粹的城市建設",
-    "Sandbox Mudbrick Pyramids": "純粹的城市建設",
-    "Sandbox Obelisks": "純粹的城市建設",
-    "Sandbox Pyramids": "純粹的城市建設",
-    "Sandbox Sun Temple": "純粹的城市建設",
-    "Shaat": "埃及前哨",
-    "Small Oasis": "水即生命",
-    "Steps": "階梯金字塔之城",
-    "The Good Life": "長壽與繁榮",
-    "Toshka": "努比亞邊境",
-    "Two Cities": "援助你的姊妹城",
-    "Unreliant": "自給自足的城市",
-    "Warfare": "保持道路暢通"
-}
-
 [es=(window_scenario_selection_custom, init)]
 function window_scenario_selection_custom_on_init(ev) {
     var list = ev.scenario_map_list
-    list.set_display_names(custom_map_display_names)
     list.change_file_path("Maps/", "map")
     list.refresh_file_finder()
     if (list.items_count > 0) {
@@ -116,10 +41,8 @@ function window_scenario_selection_custom_on_btn_start(window) {
 [es=(window_scenario_selection_custom, mission_changed)]
 function window_scenario_selection_custom_on_mission_changed(ev) {
     ui.invalidate_minimap_preview(ev.scenario_minimap.size)
-    var base = custom_map_selection_title(game.session_last_loaded_mission)
-    ev.side_mission_title.text = custom_map_display_names[base] || base
-    var sub = custom_map_display_subtitles[base]
-    ev.side_subtitle.text = sub ? sub : scenario.subtitle
+    ev.side_mission_title.text = custom_map_selection_title(game.session_last_loaded_mission)
+    ev.side_subtitle.text = scenario.subtitle
     ev.side_year.text = scenario_selection_format_start_year(scenario.start_year)
 }
 
