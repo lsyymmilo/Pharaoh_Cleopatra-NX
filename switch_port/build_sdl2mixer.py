@@ -6,7 +6,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-ROOT = 'C:/pharaoh-build'
+ROOT = 'E:/移植项目/pharaoh-build'
 SM = os.path.join(ROOT, 'build', 'SDL_mixer')
 SDL_INC = os.path.join(ROOT, 'SDL', 'include')
 XPACK = os.path.join(ROOT, 'tc', 'xpack-aarch64-none-elf-gcc-15.2.1-1.1')

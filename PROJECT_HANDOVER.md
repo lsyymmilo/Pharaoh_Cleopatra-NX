@@ -1,7 +1,7 @@
 # 法老王 (Pharaoh) Switch 移植项目 — 交接文档
 
-> 最后更新：2026-11-23（第四十八轮：署名改为 dalerank/lsyymmilo/千叶黑猫
-> 三作者——nro/安装包重打并六处同步；仓库已公开）
+> 最后更新：2026-11-23（第五十轮：mod 窗口+顶部菜单完整汉化（77 键）；
+> 迁移至 E:\移植项目 后的中文路径构建修复——全链打通）
 > 用途：换账号/新会话/新电脑后，AI 助手或开发者读完本文档即可无缝继续调试。
 > 阅读顺序：先看「当前状态」→「下一步」→ 需要背景再看「已修复清单」。
 
@@ -161,21 +161,21 @@
 
 ## 4. 构建方法（关键命令）
 
-环境要求：**纯 ASCII 路径** `C:\pharaoh-build\`（中文路径导致 gcc 乱码）。
+环境要求：**纯 ASCII 路径** `E:\移植项目\pharaoh-build\`（中文路径导致 gcc 乱码）。
 
 ```powershell
-$env:DKP_LIBNX='C:/pharaoh-build/dkp/libnx'
-Set-Location C:\pharaoh-build
+$env:DKP_LIBNX='E:/移植项目/pharaoh-build/dkp/libnx'
+Set-Location E:\移植项目\pharaoh-build
 python build_switch.py all     # = game → link → nro（增量编译，仅重编改动的 .cpp）
 # 单独 stage：game / link / nro / imgui / resources / sdl2 / freetype
 ```
 
-产物：`C:\pharaoh-build\output\Pharaoh_Cleopatra-NX.nro` / `Pharaoh_Cleopatra-NX.elf`（ELF 含符号，反汇编定位用）。
+产物：`E:\移植项目\pharaoh-build\output\Pharaoh_Cleopatra-NX.nro` / `Pharaoh_Cleopatra-NX.elf`（ELF 含符号，反汇编定位用）。
 
 **同步三处**（每次出新 nro 后）：
 ```
-C:\pharaoh-build\output\sdcard\switch\Pharaoh_Cleopatra-NX.nro        （Sphaira 列表用）
-C:\pharaoh-build\output\sdcard\switch\pharaoh\Pharaoh_Cleopatra-NX.nro（资源相对路径用）
+E:\移植项目\pharaoh-build\output\sdcard\switch\Pharaoh_Cleopatra-NX.nro        （Sphaira 列表用）
+E:\移植项目\pharaoh-build\output\sdcard\switch\pharaoh\Pharaoh_Cleopatra-NX.nro（资源相对路径用）
 <工作空间>\pharaoh-switch\output\Pharaoh_Cleopatra-NX.nro             （交付给用户）
 ```
 
@@ -830,8 +830,8 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       build_switch.py、本文档；排除：游戏包与产物（output/build）、工具链（tc/hostcc/
       msys64，可从官网再生）、gcc-src（769MB）、.temp、废弃交付物副本。
     - **推送命令模板**（schannel 后端在本机不可用，必须 openssl + 仓库内 CA）：
-      `git -c credential.helper= -c credential.helper=store --file=C:/pharaoh-build/.temp/cred.txt
-      -c http.sslBackend=openssl -c http.sslCAInfo=C:/pharaoh-build/tools/PortableGit/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem push`
+      `git -c credential.helper= -c credential.helper=store --file=E:/移植项目/pharaoh-build/.temp/cred.txt
+      -c http.sslBackend=openssl -c http.sslCAInfo=E:/移植项目/pharaoh-build/tools/PortableGit/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem push`
       cred.txt 内容=`https://lsyymmilo:<PAT>@github.com`（用完即删）。
     - **三个坑（均已实证）**：① Watt Toolkit 类加速器运行时会把 github.com 全域
       hosts 到 127.0.0.1 并自签证书反代——直连报 schannel 吊销失败/openssl
@@ -860,6 +860,63 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       zip 内说明署名已验证。
     - 用户侧提醒：SD 卡两处 nro 需重拷；已装转发器的需删除重装才会显示新作者。
 
+49. **真机日志分析（第三十轮日志）+ Setup.mp3 加载失败区分探针**（第四十九轮）：
+    - 日志源：2026-11-23 14:38 回传四件（boot.log 12308 行；nro 为 7443C431 署名版）。
+      已归档 .temp\last_logs\。
+    - **触屏回归通过**：tap raw×0.75=logical 四个采样点全对（113→84、725→543、
+      846→634、1003→752）；单点=左键；全流程可走通（logo→主菜单→建档→王朝→
+      战役→地图→简报→进城 FANFARE1.WAV）。
+    - **UNPAK 未测**：全文无 unpak: 行——探针版仍在等真机点击。
+    - **新发现：主菜单音乐 Setup.mp3 加载失败**（7041/12181 两次 play_music 后
+      均立即 FAILED）；同场景 Agbj.mp3 无 FAILED 行（9828）→ MP3 解码链路正常。
+      排查证据链：① libSDL2mixer.a（libs\，248KB/11 对象）含 music_drmp3.c.o
+      真实现（drmp3 全符号，非 stub）；② 本地验证 Setup.mp3 = 标准 MPEG-1 L3
+      CBR 44.1k/128k 无 ID3，首字节即 MPEG sync（Agbj 是 MPEG-2 L3 变体）——
+      DrMP3 均支持；③ 旧探针把 file_open 失败与 Mix_LoadMUSType_RW 失败共用
+      一行，无法区分。
+    - **本轮加固（仅探针）**：play_music 路径拆分——`sndm: read ok '<file>'
+      size=N type=N` / `sndm: read FAILED (file_open null, fopen failed on SD)` /
+      `sndm: load FAILED '<file>' err='<Mix_GetError>'`，上限 6 次。
+      **nro MD5 92A04602323A5EC415F41171004A7777**（六处一致，探针字符串已
+      二进制验证）。
+    - **帧率实测**：城市 20-30fps；present=491-751ms/s 仍占大头、upd=206-209ms/s
+      次之——22 轮 present 1:1 优化收益有限，下一档仍按第 3 节计划（城市纹理
+      2x→1x / 脏区）。
+    - 日志尾无崩溃证据（yesno 弹窗处正常；末行 jsp enter 未闭合属退出截断）。
+    - **下轮验证**：① 主菜单音乐是否恢复（看 sndm: read 行：FAILED=read 层
+      即 SD 卡文件问题，ok 后 FAILED=mixer 层带 err 原因）；② **点 UNPAK 回传
+      boot.log**（最后一条 unpak: 行即死点）。
+
+50. **mod 窗口 + 顶部菜单完整汉化；中文路径构建体系修复**（第五十轮）：
+    - **汉化**：根因=localization_ch.js 仅 161 键（en 表 1928 键，缺口 1767）——
+      mod 窗口 5 键与 top_menu 全部 71 键缺失→回退英文。修复：
+      ① .temp\patch_ch_ui.py 追加 77 键（mod 6 + 顶部菜单 71），官方术语
+      （档案/选项/顾问/12 位大臣/显示建筑/德本…）；② ui_mods_window.js 加
+      9 个 mod 中文显示名映射（id 保持英文用于下载匹配）、状态前缀
+      [开/关/错/未下载]、“脚本已解包”；③ 布局安全：顶部子菜单宽度按最长文本
+      自动测量，mod 按钮 156 单元容“解包脚本/刷新列表”4 字，状态栏“人口/德本”
+      2 字窄于原英文。nro MD5 **E72432AF3A10F753FBCA6B78B56C970C**（六处一致），
+      zip MD5 **5FA8A523E001E058974799B4746D1F5C**。
+    - **中文路径构建修复（迁移 E:\移植项目 后 build 全败的根治）**：
+      现象：as 报 can't create … .o（路径乱码=stderr 的 GBK 被 UTF-8 显示所致），
+      后 ld 报 cannot find crti.o/crtbegin.o。实测定因：**xpack binutils/gcc
+      拒绝“盘符正斜杠+中文”的绝对路径**（绝对反斜杠、相对路径均 OK）。
+      修复（build_switch.py 四点）：① ROOT 默认=脚本目录（可用 PHARAOH_ROOT
+      覆盖），含非 ASCII 时自动在 %LOCALAPPDATA% 建 junction pharaoh-pbns；
+      ② 子进程统一 _norm（ROOT 下 -I/-L/@rsp/-specs/裸路径转相对）+ 
+      cwd=ROOT，rsp 内容同样相对化；③ env 钉死 GCC_EXEC_PREFIX=
+      <tc>\lib\gcc\、COMPILER_PATH=<tc>\bin、LIBRARY_PATH=<tc>\lib\gcc\
+      aarch64-none-elf\15.2.1 + <tc>\aarch64-none-elf\lib（junction 会被
+      GetModuleFileName 解析回中文真实路径，故单靠 junction 不够——env 三件套
+      才是 ld 找 crt 的最终解）；④ stage_link 补 encoding='utf-8',
+      errors='replace'（Python 3.15 默认 UTF-8 模式下 text=True 读 GBK 输出
+      会 UnicodeDecodeError → 读取线程死亡 → r.stderr=None 报 TypeError）。
+      验证：resources 7/7、game 835/835、link ok 全链贯通。
+    - 其余：pack_clean_icon/pack_installer/refresh_backup 脚本路径同步 E 盘；
+      工作空间 pharaoh-switch\output 被清空后已重建（nro+zip+说明）。
+    - **用户测试清单**：重拷 SD 两处 nro → 看 mod 窗口/顶部菜单中文是否齐全、
+      文字是否溢出对话框；顺手看 sndm: read 行与 UNPAK 测试。
+
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
 - sdmc 磁盘文件名大小写混合（`Pharaoh_Unloaded.sg3` 等），FAT 不敏感无碍
@@ -869,7 +926,7 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
 ## 8. 文件地图
 
 ```
-C:\pharaoh-build\                        构建根（必须 ASCII 路径）
+E:\移植项目\pharaoh-build\                        构建根（必须 ASCII 路径）
 ├─ build_switch.py                       构建驱动（stage: game/link/nro/…）
 ├─ PROJECT_HANDOVER.md                   本文档
 ├─ .temp\last_logs\                      最近一次真机测试日志快照
@@ -907,9 +964,9 @@ E:\法老王NS移植版\                        V1.0 发布目录（2026-11-23�
 
 ## 9. 恢复指南
 
-- **同一台电脑换 TeleAgent 账号**：`C:\pharaoh-build\` 原位不动，无需解压任何东西。
-  新会话直接让 AI 读本文档（`C:\pharaoh-build\PROJECT_HANDOVER.md`）即可继续。
-- **换电脑**：把本备份 zip 解压，将 `pharaoh-build\` 目录放到目标机 `C:\pharaoh-build\`
+- **同一台电脑换 TeleAgent 账号**：`E:\移植项目\pharaoh-build\` 原位不动，无需解压任何东西。
+  新会话直接让 AI 读本文档（`E:\移植项目\pharaoh-build\PROJECT_HANDOVER.md`）即可继续。
+- **换电脑**：把本备份 zip 解压，将 `pharaoh-build\` 目录放到目标机 `E:\移植项目\pharaoh-build\`
   （路径必须是纯 ASCII）。工具链、libnx、libstdc++、SDL、源码、脚本全在包内，无需联网重建。
   Python 仅需系统自带；构建命令见第 4 节。
 - 若 zip 遗失：核心可再生物=工具链（xpack 官网）+ libnx（devkitPro）+ SDL/freetype 源码

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # Pack the nro with the icon taken as RAW BYTES from the user's original
 # desktop PNG. The bytes never pass through any AI-tool image-file write (the
 # platform rewrites image files saved by the toolchain, injecting an
@@ -8,7 +8,7 @@
 # byte-verified identical across 5 locations).
 import sys, os, hashlib
 
-ROOT = r'C:\pharaoh-build'
+ROOT = r'E:\移植项目\pharaoh-build'
 sys.path.insert(0, os.path.join(ROOT, 'switch_port'))
 
 ELF = os.path.join(ROOT, 'output', 'Pharaoh_Cleopatra-NX.elf')

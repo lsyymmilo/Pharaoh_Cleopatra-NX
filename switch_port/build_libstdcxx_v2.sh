@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rebuild libstdc++ (posix threads) for aarch64-none-elf against dkp newlib.
-# v2: all-ASCII paths (C:/pharaoh-build) — the v1 failure was ld receiving
+# v2: all-ASCII paths (E:/移植项目/pharaoh-build) — the v1 failure was ld receiving
 # mojibake'd Chinese paths for crt files, failing every link test.
 set -e
 set -o pipefail

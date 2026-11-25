@@ -10,7 +10,7 @@ map_name@32 is_end@40 campaign_id@44 rank@48 prev@56 next@64.
 """
 import struct
 
-path = r'C:\pharaoh-build\output\sdcard\switch\pharaoh\assets\campaign.txt'
+path = r'E:\移植项目\pharaoh-build\output\sdcard\switch\pharaoh\assets\campaign.txt'
 raw = open(path, 'rb').read()
 
 MAX_NAMES, NAME_SIZE, MAX_STEPS, MAX_CAMPAIGNS = 300, 300, 50, 10

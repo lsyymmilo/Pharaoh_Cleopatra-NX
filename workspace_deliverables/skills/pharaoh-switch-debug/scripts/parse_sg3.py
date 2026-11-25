@@ -14,7 +14,7 @@ import os
 import struct
 import sys
 
-DATA = r'C:\pharaoh-build\output\sdcard\switch\pharaoh\assets\Data'
+DATA = r'E:\移植项目\pharaoh-build\output\sdcard\switch\pharaoh\assets\Data'
 PAK_GROUPS_MAX = 300
 HDR_BASE = 680            # 80 (20 x u32) + 300 x u16 groups
 ENTRY_TABLE_OFF = HDR_BASE + 200 * 200   # 40680 (200 reserved bmp-name slots x 200B)

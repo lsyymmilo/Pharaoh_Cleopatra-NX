@@ -10,10 +10,10 @@ create_source: super-agent-skill-creator
 
 ## 0. Context source of truth (read first, only once)
 
-Read `C:\pharaoh-build\PROJECT_HANDOVER.md` — it holds the full fix history (15+),
+Read `E:\移植项目\pharaoh-build\PROJECT_HANDOVER.md` — it holds the full fix history (15+),
 file map, current state, and next steps. Do not re-derive context from chat history.
 The machine may be the SAME PC (path intact) or a NEW PC (backup zip must be
-extracted to `C:\pharaoh-build\` first — pure-ASCII path is mandatory).
+extracted to `E:\移植项目\pharaoh-build\` first — pure-ASCII path is mandatory).
 
 ## 1. Per-round standard loop
 
@@ -57,8 +57,8 @@ extracted to `C:\pharaoh-build\` first — pure-ASCII path is mandatory).
 ## 4. Build + verify + sync (exact commands)
 
 ```powershell
-$env:DKP_LIBNX='C:/pharaoh-build/dkp/libnx'
-Set-Location C:\pharaoh-build
+$env:DKP_LIBNX='E:/移植项目/pharaoh-build/dkp/libnx'
+Set-Location E:\移植项目\pharaoh-build
 python build_switch.py all          # game → link → nro (incremental)
 ```
 
@@ -68,8 +68,8 @@ comments/identifiers do NOT survive — only string literals.
 
 Sync the nro to exactly three places (hashes must match):
 ```
-C:\pharaoh-build\output\sdcard\switch\akhenaten.nro
-C:\pharaoh-build\output\sdcard\switch\pharaoh\akhenaten.nro
+E:\移植项目\pharaoh-build\output\sdcard\switch\akhenaten.nro
+E:\移植项目\pharaoh-build\output\sdcard\switch\pharaoh\akhenaten.nro
 <workspace>\pharaoh-switch\output\akhenaten.nro
 ```
 
@@ -79,8 +79,8 @@ Sphaira → send back the three desktop logs.
 ## 5. Refresh backup (desktop)
 
 ```powershell
-Copy-Item C:\Users\<user>\Desktop\{boot.log,sdl.log,akhenaten-log.txt} C:\pharaoh-build\.temp\last_logs\ -Force
-Copy-Item <workspace>\pharaoh-switch\output\akhenaten.nro C:\pharaoh-build\workspace_deliverables\ -Force
+Copy-Item C:\Users\<user>\Desktop\{boot.log,sdl.log,akhenaten-log.txt} E:\移植项目\pharaoh-build\.temp\last_logs\ -Force
+Copy-Item <workspace>\pharaoh-switch\output\akhenaten.nro E:\移植项目\pharaoh-build\workspace_deliverables\ -Force
 Set-Location C:\
 tar.exe -a -cf 'C:\Users\<user>\Desktop\Pharaoh_Switch_Port_Backup_<date>.zip' pharaoh-build
 ```
@@ -95,7 +95,7 @@ python <this-skill>\scripts\parse_sg3.py --entry Empire 201      # one entry in 
 ```
 Use BEFORE burning a device test round: most pak-load questions (image sizes,
 mirrors, offsets, system slots) are answerable from the local staging copy in
-`C:\pharaoh-build\output\sdcard\switch\pharaoh\assets\Data\`.
+`E:\移植项目\pharaoh-build\output\sdcard\switch\pharaoh\assets\Data\`.
 
 ## 7. Operations routing map (every task type → local authority + action)
 
@@ -106,7 +106,7 @@ mirrors, offsets, system slots) are answerable from the local staging copy in
 | Build new nro | §4 commands | incremental `build_switch.py all` |
 | Deliver to user | 3-path sync (§4) | hash-verify all three |
 | Backup refresh | §5 commands | tar + count + spot-MD5 |
-| State/history/fix list | `C:\pharaoh-build\PROJECT_HANDOVER.md` | update §2/§3/§7 after each round |
+| State/history/fix list | `E:\移植项目\pharaoh-build\PROJECT_HANDOVER.md` | update §2/§3/§7 after each round |
 | Install zip repack (post-milestone) | `output\sdcard\switch\` tree | compress AFTER game boots (old zip has stale nro) |
 | Cross-account / cross-PC resume | handover §9/§10 + backup zip | read handover; copy skill folder to new account config dir |
 | Verify fix entered binary | ASCII string search in nro | only string literals survive compilation |

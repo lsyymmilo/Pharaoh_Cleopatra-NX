@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 
-ROOT = r'C:\phsw'
+ROOT = r'E:\移植项目\phsw'
 SRC = os.path.join(ROOT, 'deps', 'nl-up', 'newlib-4.6.0.20260123')
 LIBSYS = os.path.join(SRC, 'libgloss', 'libsysbase')
 NEWLIB_INC = os.path.join(SRC, 'newlib', 'libc', 'include')

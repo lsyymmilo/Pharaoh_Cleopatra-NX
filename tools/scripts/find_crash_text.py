@@ -17,8 +17,8 @@ needle1 = "獨特的王國"
 needle2 = "甚而一直永遠下去"
 
 roots = [
-    r'C:\pharaoh-build\src\Akhenaten-master\src\scripts',
-    r'C:\pharaoh-build\output\sdcard\switch\pharaoh\assets',
+    r'E:\移植项目\pharaoh-build\src\Akhenaten-master\src\scripts',
+    r'E:\移植项目\pharaoh-build\output\sdcard\switch\pharaoh\assets',
 ]
 
 for root in roots:

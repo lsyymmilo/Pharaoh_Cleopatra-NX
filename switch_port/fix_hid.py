@@ -1,5 +1,5 @@
 import re
-p = r'C:\phsw\deps\libnx\libnx-master\nx\source\services\hid.c'
+p = r'E:\移植项目\phsw\deps\libnx\libnx-master\nx\source\services\hid.c'
 c = open(p, encoding='utf-8', errors='replace').read()
 # replace every atomic_load_explicit(&EXPR, memory_order_acquire) with (*(EXPR))
 pat = re.compile(r'atomic_load_explicit\(&([^;()]+(?:\([^;()]*\))?[^;]*?),\s*memory_order_acquire\)')

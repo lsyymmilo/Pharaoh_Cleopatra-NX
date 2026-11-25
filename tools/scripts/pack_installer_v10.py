@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """V1.0 安装包打包脚本（2026-11-23）
-把 C:\pharaoh-build\output\sdcard\switch\ 整树 + 中文安装说明 打成 zip。
+把 E:\移植项目\pharaoh-build\output\sdcard\switch\ 整树 + 中文安装说明 打成 zip。
 用 Python zipfile 保证：
   - 中文条目名自动置 UTF-8 flag（tar.exe 在 GB 代码页下有乱码风险）
   - switch 树内不含任何非 ASCII 路径（Switch devoptab 不认多字节文件名）
@@ -8,7 +8,7 @@
 """
 import os, sys, time, zipfile, hashlib
 
-SRC_ROOT = r"C:\pharaoh-build\output\sdcard\switch"
+SRC_ROOT = r"E:\移植项目\pharaoh-build\output\sdcard\switch"
 README = r"E:\法老王NS移植版\安装说明.txt"
 OUT = r"E:\法老王NS移植版\Pharaoh_Cleopatra-NX_V1.0_安装包.zip"
 

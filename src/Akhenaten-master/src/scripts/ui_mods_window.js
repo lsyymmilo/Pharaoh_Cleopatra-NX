@@ -1,5 +1,23 @@
 log_info("akhenaten: mods window started")
 
+// 中文显示名：列表项存 mod id（下载匹配用），仅在渲染时翻译显示名
+var mods_display_names = {
+    pharaoh_german_voices: "德语语音包",
+    pharaoh_french_voices: "法语语音包",
+    pharaoh_spanish_voices: "西班牙语语音包",
+    pharaoh_polish_voices: "波兰语语音包",
+    pharaoh_italian_voices: "意大利语语音包",
+    pharaoh_russian_voices: "俄语语音包",
+    pharaoh_sounds_pack: "人物语音包",
+    pharaoh_custom_mainmenu: "自定义主菜单",
+    pharaoh_well_info_trainer: "水井信息助手"
+}
+
+function mods_display_name_cn(id) {
+    var cn = mods_display_names[id]
+    return cn ? cn : mods.display_name(id)
+}
+
 [es=(mods_window, doubleclick_item)]
 function mods_window_on_double_click(p) {
     if (!p || !p.text) return
@@ -17,8 +35,8 @@ function mods_window_on_render_item(p) {
     var prefix, name
     if (!mods.downloaded(p.text)) {
         var progress = mods.download_progress(p.text)
-        prefix = progress > 0 ? "[" + progress + "] " : "[n/a] "
-        name = mods.display_name(p.text)
+        prefix = progress > 0 ? "[" + progress + "] " : "[未下载] "
+        name = mods_display_name_cn(p.text)
         if (progress > 0) {
             var num_points = Math.floor((__game_frame() % 90) / 30)
             for (var i = 0; i < num_points; i++) {
@@ -26,9 +44,9 @@ function mods_window_on_render_item(p) {
             }
         }
     } else {
-        var state = mods.enabled(p.text) ? (mods.broken(p.text) ? "ERR" : "ON") : "OFF"
+        var state = mods.enabled(p.text) ? (mods.broken(p.text) ? "错" : "开") : "关"
         prefix = "[" + state + "] "
-        name = mods.display_name(p.text)
+        name = mods_display_name_cn(p.text)
     }
 
     ui.label(prefix + name, { x: p.x, y: p.y }, p.font)
@@ -37,7 +55,7 @@ function mods_window_on_render_item(p) {
 function mods_unpack_scripts() {
     var msg = __mods_unpack_scripts()
     if (msg) {
-        ui.show_ok(msg, "Scripts unpacked")
+        ui.show_ok(msg, "脚本已解包")
     }
 }
 

@@ -4,7 +4,7 @@ import struct
 import sys
 import os
 
-DATA = r'C:\pharaoh-build\output\sdcard\switch\pharaoh\assets\Data'
+DATA = r'E:\移植项目\pharaoh-build\output\sdcard\switch\pharaoh\assets\Data'
 PAK_GROUPS_MAX = 300
 BMP_CAP = 200
 ENTRY_BYTES_BASE = 63          # fixed part of one entry header

@@ -6,8 +6,8 @@ import io, struct, sys, subprocess
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 BIN = r'C:\Users\Lsyym\Desktop\c\01795322912_05623de1466dd000_thread_info.bin'
-ELF = r'C:\pharaoh-build\output\akhenaten.elf'
-ADDR2LINE = r'C:\pharaoh-build\tc\xpack-aarch64-none-elf-gcc-15.2.1-1.1\bin\aarch64-none-elf-addr2line.exe'
+ELF = r'E:\移植项目\pharaoh-build\output\akhenaten.elf'
+ADDR2LINE = r'E:\移植项目\pharaoh-build\tc\xpack-aarch64-none-elf-gcc-15.2.1-1.1\bin\aarch64-none-elf-addr2line.exe'
 A2L = ELF  # addr2line 参数里放 elf 路径
 
 MOD_LO = 0x0000000d3ca51000

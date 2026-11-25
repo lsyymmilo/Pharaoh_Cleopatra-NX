@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Akhenaten Switch build driver v2 — all-ASCII paths (C:/pharaoh-build).
+"""Akhenaten Switch build driver v2.
 
-Stages: game, link, nro  (libs were prebuilt; run after libstdc++ posix swap)
-Usage: python build_switch.py <stage> [stage...]
+中文路径兼容（2026-11-23）：xpack binutils（as/ld）和 gcc 内部工具链路径推导
+无法处理"盘符正斜杠 + 中文"的绝对路径（as 报 can't create、ld 找不到 crt*.o）。
+若构建根含非 ASCII 字符，本脚本自动在 %LOCALAPPDATA% 建目录联接 pharaoh-pbns
+指向构建根，并改用联接路径（纯 ASCII）驱动全部子进程——文件物理位置不变。
+可用环境变量 PHARAOH_ROOT 显式覆盖构建根。
 """
 import argparse
 import glob
@@ -13,7 +16,18 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-ROOT = 'C:/pharaoh-build'
+ROOT = os.environ.get('PHARAOH_ROOT') or os.path.dirname(os.path.abspath(__file__))
+
+if any(ord(c) > 127 for c in ROOT):
+    _jbase = os.environ.get('LOCALAPPDATA') or os.environ.get('TEMP') or 'C:\\'
+    _jlink = os.path.join(_jbase, 'pharaoh-pbns')
+    if not os.path.exists(_jlink):
+        subprocess.run(['cmd', '/c', 'mklink', '/J', _jlink, ROOT], capture_output=True)
+    if os.path.exists(_jlink):
+        ROOT = _jlink
+    else:
+        print('WARN: junction failed; non-ASCII ROOT may break as/ld', file=sys.stderr)
+
 SRC = os.path.join(ROOT, 'src', 'Akhenaten-master')
 BUILD = os.path.join(ROOT, 'build')
 OUT = os.path.join(ROOT, 'output')
@@ -40,6 +54,16 @@ SDLMIXER = os.path.join(BUILD, 'SDL_mixer')
 
 LIB_OUT = os.path.join(ROOT, 'libs')
 
+# gcc 工具链搜索路径：gcc 用 GetModuleFileName 推导自身路径（junction 会解析成
+# 中文真实路径），ld 随即以中文绝对路径找 crt*.o 而失败。用标准 env 把全部
+# 搜索路径钉到 ASCII 前缀（junction 透明，指向同一物理文件）。
+os.environ['GCC_EXEC_PREFIX'] = os.path.join(TC_BIN, '..', 'lib', 'gcc') + os.sep
+os.environ['COMPILER_PATH'] = TC_BIN
+os.environ['LIBRARY_PATH'] = ';'.join([
+    os.path.join(TC_BIN, '..', 'lib', 'gcc', 'aarch64-none-elf', '15.2.1'),
+    os.path.join(TC_BIN, '..', 'aarch64-none-elf', 'lib'),
+])
+
 ARCH = '-march=armv8-a+crc+crypto -mtune=cortex-a57 -fPIC -ftls-model=local-exec'
 BASE_FLAGS = ARCH.split() + [
     '-D__SWITCH__', '-ffunction-sections', '-fdata-sections', '-O2', '-DNDEBUG',
@@ -55,9 +79,42 @@ CXX_FLAGS = BASE_FLAGS + ['-std=gnu++17', '-fno-exceptions', '-Wno-invalid-offse
 
 JOBS = max(2, (os.cpu_count() or 4) - 2)
 
+# ---- 中文路径修复（2026-11-23）：xpack binutils 的 as/ld 无法写入带盘符正斜杠的
+# 中文绝对路径（例如 E:/移植项目/...\x.o 会报 can't create ... No such file or
+# directory），但 cwd=构建根时的相对路径（含中文 cwd）工作正常。所有子进程调用
+# 因此统一：cwd=ROOT + 命令行路径参数相对化（rsp 文件内亦然）。
+def _rel(p):
+    try:
+        if os.path.isabs(p):
+            return os.path.relpath(p, ROOT)
+    except (ValueError, TypeError):
+        pass
+    return p
+
+
+def _norm(cmd):
+    out = []
+    for a in cmd:
+        s = str(a)
+        handled = False
+        for pref in ('-I', '-L'):
+            if s.startswith(pref) and len(s) > len(pref):
+                out.append(pref + _rel(s[len(pref):]))
+                handled = True
+                break
+        if handled:
+            continue
+        if s.startswith('@') and len(s) > 1:
+            out.append('@' + _rel(s[1:]))
+        elif s.startswith('-specs=') and len(s) > 7:
+            out.append('-specs=' + _rel(s[7:]))
+        else:
+            out.append(_rel(s))
+    return out
+
 
 def sh(cmd, **kw):
-    r = subprocess.run(cmd, capture_output=True, text=True,
+    r = subprocess.run(_norm(cmd), capture_output=True, text=True, cwd=ROOT,
                        encoding='utf-8', errors='replace', **kw)
     if r.returncode != 0:
         print('CMD FAILED:', ' '.join(cmd))
@@ -79,7 +136,7 @@ class CompilePool:
             if os.path.exists(obj) and os.path.getmtime(obj) > os.path.getmtime(src):
                 return None
             cmd = extra + ['-c', src, '-o', obj]
-            r = subprocess.run(cmd, capture_output=True, text=True,
+            r = subprocess.run(_norm(cmd), capture_output=True, text=True, cwd=ROOT,
                                 encoding='utf-8', errors='replace')
             if r.returncode != 0:
                 return (src, (r.stderr or r.stdout or '')[-6000:])
@@ -156,8 +213,8 @@ def ar(output, objs):
         os.remove(tmp)
     rsp = output + '.rsp'
     with open(rsp, 'w') as f:
-        f.write('\n'.join('"' + o.replace('\\', '/') + '"' for o in objs))
-    sh([AR, 'rcs', tmp.replace('\\', '/'), '@' + rsp.replace('\\', '/')])
+        f.write('\n'.join('"' + _rel(o).replace('\\', '/') + '"' for o in objs))
+    sh([AR, 'rcs', tmp, '@' + rsp])
     shutil.move(tmp, output)
 
 
@@ -349,7 +406,7 @@ def stage_link():
     objs = sorted(glob.glob(os.path.join(BUILD, 'obj', 'game', '**', '*.o'), recursive=True))
     if not objs:
         raise SystemExit('no game objects')
-    env = dict(os.environ, DKP_LIBNX=DKP_LIBNX.replace('\\', '/'))
+    env = dict(os.environ, DKP_LIBNX=DKP_LIBNX)
     rsp = os.path.join(BUILD, 'link.rsp')
     libs = [os.path.join(LIB_OUT, 'librc.a'),
             os.path.join(LIB_OUT, 'libSDL2mixer.a'),
@@ -364,9 +421,9 @@ def stage_link():
         '-specs=' + os.path.join(SHIM, 'akhenaten_switch.specs'),
         '-L' + os.path.join(DKP_LIBNX, 'lib'), '-L' + LIB_OUT,
         '-L' + NEWLIB_LIB,
-        '-o', elf.replace('\\', '/'),
-        '@' + rsp.replace('\\', '/'),
-    ] + [l.replace('\\', '/') for l in libs] + [
+        '-o', elf,
+        '@' + rsp,
+    ] + libs + [
         # everything inside one group: the driver's own appended
         # -lstdc++/-lc/-lgcc would land OUTSIDE the group and leave
         # libc<->libsysbase symbols unresolved (verified minimal case).
@@ -377,8 +434,9 @@ def stage_link():
         '-Wl,--end-group',
     ]
     with open(rsp, 'w') as f:
-        f.write('\n'.join(o.replace('\\', '/') for o in objs))
-    r = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        f.write('\n'.join(_rel(o).replace('\\', '/') for o in objs))
+    r = subprocess.run(_norm(cmd), capture_output=True, text=True, env=env, cwd=ROOT,
+                       encoding='utf-8', errors='replace')
     print(r.stdout[-3000:])
     print(r.stderr[-12000:])
     if r.returncode != 0:

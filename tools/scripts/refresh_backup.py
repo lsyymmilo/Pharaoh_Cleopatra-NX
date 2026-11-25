@@ -5,7 +5,7 @@
 """
 import os, sys, time, zipfile, hashlib
 
-SRC = r"C:\pharaoh-build"
+SRC = r"E:\移植项目\pharaoh-build"
 TMP = os.path.join(SRC, ".temp", "backup_refresh.tmp.zip")
 DEST = r"C:\Users\Lsyym\Desktop\法老王Switch移植项目备份_20261123.zip"
 SKIP = {os.path.abspath(TMP).lower(), os.path.abspath(DEST).lower()}

@@ -601,6 +601,20 @@ bool sound_manager_t::play_music(pcstr filename, int volume_pct, bool loop) {
 #else
     Mix_MusicType music_type = MUS_NONE;
     _music_player->current_music_data = load_music_data(filename, music_type);
+#if defined(GAME_PLATFORM_NSWITCH)
+    static int s_pm_read_probes = 0;
+    if (s_pm_read_probes < 6) {
+        s_pm_read_probes++;
+        if (_music_player->current_music_data) {
+            switch_boot_log("sndm: read ok '%s' size=%u type=%d",
+                            filename ? filename : "<null>",
+                            (unsigned)_music_player->current_music_data->size(), (int)music_type);
+        } else {
+            switch_boot_log("sndm: read FAILED '%s' (file_open null, fopen failed on SD)",
+                            filename ? filename : "<null>");
+        }
+    }
+#endif
     if (_music_player->current_music_data) {
         SDL_RWops* sdl_music = SDL_RWFromConstMem(_music_player->current_music_data->data(), _music_player->current_music_data->size());
         _music_player->music = Mix_LoadMUSType_RW(sdl_music, music_type, SDL_TRUE);
@@ -625,9 +639,9 @@ bool sound_manager_t::play_music(pcstr filename, int volume_pct, bool loop) {
         logs::warn("Error opening music file '%s'. Reason: %s", filename, Mix_GetError());
 #if defined(GAME_PLATFORM_NSWITCH)
         static int s_pm_load_fail_probes = 0;
-        if (s_pm_load_fail_probes < 3) {
+        if (s_pm_load_fail_probes < 6) {
             s_pm_load_fail_probes++;
-            switch_boot_log("sndm: load FAILED '%s'", filename ? filename : "<null>");
+            switch_boot_log("sndm: load FAILED '%s' err='%s'", filename ? filename : "<null>", Mix_GetError());
         }
 #endif
     } else {

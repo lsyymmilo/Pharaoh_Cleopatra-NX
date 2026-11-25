@@ -4,8 +4,8 @@ import io, re, sys
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-CH = r'C:\pharaoh-build\src\Akhenaten-master\src\scripts\localization_base_ch.js'
-EN = r'C:\pharaoh-build\src\Akhenaten-master\src\scripts\localization_base_en.js'
+CH = r'E:\移植项目\pharaoh-build\src\Akhenaten-master\src\scripts\localization_base_ch.js'
+EN = r'E:\移植项目\pharaoh-build\src\Akhenaten-master\src\scripts\localization_base_en.js'
 
 ch = open(CH, encoding='utf-8').read()
 en = open(EN, encoding='utf-8').read()
