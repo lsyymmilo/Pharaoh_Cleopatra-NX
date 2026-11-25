@@ -1,7 +1,7 @@
 # 法老王 (Pharaoh) Switch 移植项目 — 交接文档
 
-> 最后更新：2026-11-23（第五十轮：mod 窗口+顶部菜单完整汉化（77 键）；
-> 迁移至 E:\移植项目 后的中文路径构建修复——全链打通）
+> 最后更新：2026-11-23（第五十一轮：字体白名单补全 63 字——消除首帧问号/懒烘焙；
+> UI 文字首次出现即中文）
 > 用途：换账号/新会话/新电脑后，AI 助手或开发者读完本文档即可无缝继续调试。
 > 阅读顺序：先看「当前状态」→「下一步」→ 需要背景再看「已修复清单」。
 
@@ -916,6 +916,25 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       工作空间 pharaoh-switch\output 被清空后已重建（nro+zip+说明）。
     - **用户测试清单**：重拷 SD 两处 nro → 看 mod 窗口/顶部菜单中文是否齐全、
       文字是否溢出对话框；顺手看 sndm: read 行与 UNPAK 测试。
+
+51. **字体白名单补全：消除首帧问号与懒烘焙重烘**（第五十一轮）：
+    - 现象：真机实测中文仍“先显示？再变汉字”，且日志 fnt: regen #3/#4 反复触发
+      （symbols 2756→2757→2767，每次全量重建 3717 字形）。
+    - 机制：字体白名单=localization.js 的 game_languages[ch].symbols（2691 条）；
+      预烘焙只烘白名单+ASCII（regen #2 symbols=2756）；白名单外字符首次渲染
+      触发 font_add_missing_glyph → 全量 regen（问号+卡顿）。
+    - 根因：本轮汉化新增 77 键+mod 显示名含 **63 个白名单外新字符**
+      （钮/键/视/设/译/财/贸/档/栏/错误·顶项顾频鱼…）。非主字体无此问题
+      （其它字体渲染时借用主字形，font.cpp:258 “other face borrows the main-
+      face glyph instead of starting a lazy”，不触发 regen）。
+    - 修复：.temp\patch_font_symbols.py ——扫描 localization_ch.js（238 键）+
+      ui_mods_window.js 全部 CJK 字符（483 字），对比 ch symbols 缺 63 → 追加
+      （2691→2754 条），resources 重编生效。首启 regen #2 即烘全 2754 字，
+      全 UI（含选项菜单、mod 窗口）首次出现即中文。
+    - nro MD5 **9E7DF480E3DC079DB721D1737B1DFD25**（六处一致），
+      zip MD5 **3D40F10188B9F289E0648B5C324665DC**。
+    - 提示：以后新增中文 UI 文本时，重跑 patch_font_symbols.py 并重编 resources
+      即可保持零问号。
 
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程
