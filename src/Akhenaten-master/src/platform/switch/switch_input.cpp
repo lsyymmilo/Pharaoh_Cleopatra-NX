@@ -212,8 +212,8 @@ static struct {
     uint8_t* target_text; // captured internal buffer to write the swkbd result into
 } vkbd;
 
-static int hires_dx = 0; // sub-pixel-precision counters to allow slow pointer motion of <1 pixel per frame
-static int hires_dy = 0;
+static float hires_dx = 0.0f; // sub-pixel accumulator: slow pushes glide instead of stepping
+static float hires_dy = 0.0f;
 static int fast_mouse = 0;
 static int slow_mouse = 0;
 static int pressed_buttons[SWITCH_NUM_BUTTONS];
@@ -428,28 +428,65 @@ void switch_handle_analog_sticks(void) {
                         SDL_JoystickGetAxis(joy, 2), SDL_JoystickGetAxis(joy, 3));
     }
     switch_rescale_analog(&left_x, &left_y, 2000);
-    hires_dx += left_x; // sub-pixel precision to allow slow mouse motion at speeds < 1 pixel/frame
-    hires_dy += left_y;
 
-// Analog-cursor speed: joystick rescale caps |axis| at 2000, so slowdown is
-    // the px-per-frame divisor in LOGICAL space (960x540). 400 ≈ 5 px/frame
-    // (~75 px/s at 15 fps): fine enough to hit small buttons, screen still
-    // crossed in ~13 s; ZL (fast) ×3, ZR (slow) ÷8 on top.
-    int slowdown = 400;
+    // ---- analog cursor precision + smoothness --------------------------------
+    // 1) radial dead zone: stick drift never nudges the pointer
+    // 2) gamma response curve: a small push moves a fraction of a pixel per
+    //    frame (fine aiming), full deflection still crosses the screen fast
+    // 3) one-pole low-pass on the shaped axis: kills per-frame jitter
+    // 4) float sub-pixel accumulator: slow motion glides instead of stepping
+    //    (the old integer accumulator produced a visible 4-frame stutter at
+    //    low speeds because statically-halved values never reached 1 px)
+    {
+        const float dead = 0.16f;
+        const float gamma = 1.6f;
+        const float smoothing = 0.55f;
+        float raw_x = (float)left_x / 2000.0f;
+        float raw_y = (float)left_y / 2000.0f;
+        float mag = std::sqrt(raw_x * raw_x + raw_y * raw_y);
+        float shaped_x = 0.0f;
+        float shaped_y = 0.0f;
+        if (mag > 0.0001f) {
+            float m = (mag > 1.0f) ? 1.0f : mag;
+            float t = 0.0f;
+            if (m > dead) {
+                t = (m - dead) / (1.0f - dead);
+                t = std::pow(t, gamma);
+            }
+            shaped_x = (raw_x / mag) * t;
+            shaped_y = (raw_y / mag) * t;
+        }
+        static float smooth_x = 0.0f;
+        static float smooth_y = 0.0f;
+        smooth_x += (shaped_x - smooth_x) * smoothing;
+        smooth_y += (shaped_y - smooth_y) * smoothing;
+        if (std::fabs(smooth_x) < 0.0005f) {
+            smooth_x = 0.0f;
+        }
+        if (std::fabs(smooth_y) < 0.0005f) {
+            smooth_y = 0.0f;
+        }
 
-    if (fast_mouse) {
-        slowdown /= 3;
+        // Analog-cursor speed: joystick rescale caps |axis| at 2000, so slowdown
+        // is the px-per-frame divisor in LOGICAL space (960x540). 340 ≈ 5.9 px
+        // per frame at full tilt; the gamma curve keeps the low end near
+        // 0.3–1 px/frame for precise clicks. ZL (fast) ×3, ZR (slow) ÷8.
+        int slowdown = 340;
+        if (fast_mouse) {
+            slowdown /= 3;
+        }
+        if (slow_mouse) {
+            slowdown *= 8;
+        }
+        hires_dx += smooth_x * (2000.0f / (float)slowdown);
+        hires_dy += smooth_y * (2000.0f / (float)slowdown);
     }
 
-    if (slow_mouse) {
-        slowdown *= 8;
-    }
-
-    if (hires_dx != 0 || hires_dy != 0) {
-        int xrel = hires_dx / slowdown;
-        int yrel = hires_dy / slowdown;
-        hires_dx %= slowdown;
-        hires_dy %= slowdown;
+    if (hires_dx != 0.0f || hires_dy != 0.0f) {
+        int xrel = (int)hires_dx;
+        int yrel = (int)hires_dy;
+        hires_dx -= (float)xrel;
+        hires_dy -= (float)yrel;
         if (xrel != 0 || yrel != 0) {
             // Analog cursor in LOGICAL screen space (engine coordinates): same
             // space as the visible software cursor and the A/B click path.
