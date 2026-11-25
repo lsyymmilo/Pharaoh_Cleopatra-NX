@@ -172,6 +172,10 @@ python build_switch.py all     # = game → link → nro（增量编译，仅重
 
 产物：`E:\移植项目\pharaoh-build\output\Pharaoh_Cleopatra-NX.nro` / `Pharaoh_Cleopatra-NX.elf`（ELF 含符号，反汇编定位用）。
 
+**版本归档（每版必做）**：`python tools\scripts\archive_nro.py --label "第N轮" --note "本版说明"`
+→ 复制到 `output\nro_history\r<NN>_<MD5前8>\`（含 info.txt，同 MD5 幂等跳过）。
+桌面备份 zip 是整树打包，因此自动收录所有历史版本；`tools\scripts\refresh_backup.py` 打包前也会自动调用归档。
+
 **同步三处**（每次出新 nro 后）：
 ```
 E:\移植项目\pharaoh-build\output\sdcard\switch\Pharaoh_Cleopatra-NX.nro        （Sphaira 列表用）
@@ -1086,6 +1090,10 @@ imgui.ini 正常写出（文件写/ImGui 均活）。
       用旧头文件混编，产物大小/id 都不对。**
     - 重建 nro MD5 **087962F19A51EDD6C3BD937151574036**（26,941,523 B，六处一致），
       zip MD5 **4861D2FD40C6A711A3B026A525DA437E**。
+    - **新增版本归档机制（用户要求长期执行）**：`tools\scripts\archive_nro.py` 把每次
+      产出的 nro 复制到 `output\nro_history\r<NN>_<MD5前8>\`（含 info.txt），
+      桌面备份 zip 整树打包会一并收录；`refresh_backup.py` 打包前自动调用，同 MD5 幂等。
+      以后遇到"回退上一版"可直接从备份包该目录取回原始字节。
 
 其他已知事实：
 - `hardware_concurrency()` 返回 0 → 线程池单线程

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """刷新桌面全树备份 zip（复刻历史备份方式：pharaoh-build 整树）。
 先打临时文件，成功后原子替换桌面备份，避免中途失败损坏原备份。
 排除：临时 zip 自身。
@@ -6,12 +6,26 @@
 import os, sys, time, zipfile, hashlib
 
 SRC = r"E:\移植项目\pharaoh-build"
-TMP = os.path.join(SRC, ".temp", "backup_refresh.tmp.zip")
+TMP = r"C:\Users\Lsyym\Desktop\法老王Switch移植项目备份_20261123.zip.tmp"  # 与 DEST 同盘，os.replace 才能原子替换
 DEST = r"C:\Users\Lsyym\Desktop\法老王Switch移植项目备份_20261123.zip"
 SKIP = {os.path.abspath(TMP).lower(), os.path.abspath(DEST).lower()}
 
+def archive_current_nro():
+    """备份前先把当前 nro 归档到 output/nro_history/（每版独立文件夹）。"""
+    try:
+        import importlib.util
+        p = os.path.join(SRC, "tools", "scripts", "archive_nro.py")
+        spec = importlib.util.spec_from_file_location("archive_nro", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.main()
+    except Exception as e:
+        print("nro archive skipped: %s" % e)
+
+
 def main():
     t0 = time.time()
+    archive_current_nro()
     if os.path.exists(TMP):
         os.remove(TMP)
     n = 0
@@ -19,7 +33,7 @@ def main():
         for root, dirs, files in os.walk(SRC):
             for name in sorted(files):
                 abspath = os.path.join(root, name)
-                if os.path.abspath(abspath).lower() in SKIP:
+                if os.path.abspath(abspath).lower() in SKIP or name.endswith('.tmp.zip'):
                     continue
                 arc = "pharaoh-build/" + os.path.relpath(abspath, SRC).replace("\\", "/")
                 try:
