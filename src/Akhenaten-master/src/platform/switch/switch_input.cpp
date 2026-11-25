@@ -439,8 +439,8 @@ void switch_handle_analog_sticks(void) {
     //    low speeds because statically-halved values never reached 1 px)
     {
         const float dead = 0.16f;
-        const float gamma = 1.6f;
-        const float smoothing = 0.55f;
+        const float gamma = 1.45f;
+        const float smoothing = 0.62f;
         float raw_x = (float)left_x / 2000.0f;
         float raw_y = (float)left_y / 2000.0f;
         float mag = std::sqrt(raw_x * raw_x + raw_y * raw_y);
@@ -468,10 +468,11 @@ void switch_handle_analog_sticks(void) {
         }
 
         // Analog-cursor speed: joystick rescale caps |axis| at 2000, so slowdown
-        // is the px-per-frame divisor in LOGICAL space (960x540). 340 ≈ 5.9 px
-        // per frame at full tilt; the gamma curve keeps the low end near
-        // 0.3–1 px/frame for precise clicks. ZL (fast) ×3, ZR (slow) ÷8.
-        int slowdown = 340;
+        // is the px-per-frame divisor in LOGICAL space (960x540). 245 ≈ 8.2 px
+        // per frame at full tilt (screen crossed in ~2 s); gamma 1.45 keeps the
+        // low end around 0.6–2 px/frame so small buttons stay clickable.
+        // ZL (fast) ×3, ZR (slow) ÷8.
+        int slowdown = 245;
         if (fast_mouse) {
             slowdown /= 3;
         }
